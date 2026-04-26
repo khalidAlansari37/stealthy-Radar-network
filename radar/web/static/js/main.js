@@ -14,7 +14,8 @@ const state = {
     selectedMac: null,
     devices: [],
     searchQuery: '',
-    refreshInterval: null
+    refreshInterval: null,
+    lastLoggedMac: null
 };
 
 // "Online" = seen within the last 5 minutes (scan runs every 3 min + jitter)
@@ -403,6 +404,35 @@ function updateDetailView(data) {
     
     const d = data.info;
     const sessions = data.sessions || [];
+    
+    if (state.lastLoggedMac !== d.mac_address) {
+        console.group(`📡 Device Intelligence Report: ${getDisplayName(d)}`);
+        console.log(JSON.stringify({
+            network_identity: {
+                name: getDisplayName(d),
+                mac_address: d.mac_address,
+                ip_address: d.ip_address,
+                manufacturer: d.manufacturer,
+                device_type: d.device_type,
+                os_fingerprint: d.os_guess
+            },
+            activity_metrics: {
+                first_seen: d.first_seen,
+                last_seen: d.last_seen,
+                confidence_score: d.confidence,
+                total_bytes_transferred: d.total_bytes,
+                last_activity: d.last_activity
+            },
+            discovery_data: {
+                mdns_hostname: d.mdns_hostname,
+                ssdp_info: d.ssdp_info,
+                open_ports_raw: d.open_ports ? JSON.parse(d.open_ports) : []
+            },
+            session_history: sessions
+        }, null, 2));
+        console.groupEnd();
+        state.lastLoggedMac = d.mac_address;
+    }
     
     setElText('detail-name', getDisplayName(d));
     setElText('detail-mac', d.mac_address);
