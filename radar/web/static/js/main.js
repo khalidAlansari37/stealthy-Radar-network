@@ -238,7 +238,8 @@ function updateHomeView(overview, devices, topApps, topBandwidth) {
     
     // Stats
     setElText('stat-total-devices', overview.network_stats.total_known);
-    setElText('stat-active-today', overview.network_stats.active_today);
+    const onlineCount = devices.filter(d => (new Date() - new Date(d.last_seen)) < ONLINE_THRESHOLD_MS).length;
+    setElText('stat-active-today', onlineCount);
     setElText('stat-cpu', `${overview.system.cpu.toFixed(1)}%`);
     
     const cpuBar = document.getElementById('cpu-bar');
@@ -289,14 +290,10 @@ function renderDeviceGrid() {
     
     const now = new Date();
     
-    // HOME: show devices seen today, sorted by recency
-    const today = now.toISOString().split('T')[0];
-    const todayDevices = state.devices.filter(d => {
-        const seen = d.last_seen.split('T')[0];
-        return seen === today;
-    });
-    
-    const filtered = todayDevices.filter(d => {
+    const filtered = state.devices.filter(d => {
+        const isOnline = (now - new Date(d.last_seen)) < ONLINE_THRESHOLD_MS;
+        if (!isOnline) return false;
+
         if (!state.searchQuery) return true;
         const name = (d.device_name || d.mdns_hostname || "Unknown").toLowerCase();
         const ip = d.ip_address.toLowerCase();
@@ -341,7 +338,7 @@ function renderDeviceGrid() {
                 <div class="device-icon">${icon}</div>
                 <div class="device-meta">
                     <h4>${name}</h4>
-                    <p class="dim small mono">${d.ip_address}</p>
+                    <p class="dim small mono">${d.ip_address} | <span class="highlight">${d.os_guess || 'Scanning...'}</span></p>
                 </div>
             </div>
             <div class="status-row">
@@ -357,7 +354,7 @@ function renderDeviceGrid() {
     
     // Show count
     const header = document.querySelector('.device-section .section-header h2');
-    if (header) header.textContent = `NETWORK RECONNAISSANCE (${filtered.length} devices today)`;
+    if (header) header.textContent = `NETWORK RECONNAISSANCE (${filtered.length} devices online)`;
 }
 
 function updateHistoryView(devices) {
