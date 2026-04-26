@@ -342,85 +342,60 @@ kick: ## Kick a device off Wi-Fi (usage: make kick MAC=XX:XX:XX:XX:XX:XX BSSID=Y
 
 ## 3. 🥷 Advanced Stealth & Evasion
 
-### 3.1 Remote C2 via Telegram Bot (`radar/utils/telegram_bot.py`) — NEW FILE
+### 3.1 Automated Port Scanning (Nmap Integration)
 
-**Goal:** Control Radar from anywhere in the world by texting a Telegram bot.
+**Goal:** Automatically scan discovered devices to find open ports and running services (e.g., open web servers, SSH access).
 
-**Setup (One-time):**
-1. Text `@BotFather` on Telegram and type `/newbot`.
-2. Get your `TELEGRAM_BOT_TOKEN`.
-3. Add to your `.env` file:
-   ```
-   TELEGRAM_BOT_TOKEN=your_token_here
-   TELEGRAM_CHAT_ID=your_chat_id_here
-   ```
+**How it works:**
+1. When a new device is discovered by the ARP Scanner, trigger a targeted port scan.
+2. Identify open ports and infer the services running on them.
+3. This adds a critical layer of active reconnaissance to Radar's passive monitoring.
 
-**New field in `radar/config.py`:**
+**New file: `radar/fingerprint/port_scanner.py`**
 ```python
-class TelegramConfig(BaseModel):
-    enabled: bool = False
-    bot_token: str = ""
-    chat_id: str = ""
-
-# Add to Settings class:
-telegram: TelegramConfig = Field(default_factory=TelegramConfig)
-```
-
-**New file: `radar/utils/telegram_bot.py`**
-```python
-import requests
+import socket
+from concurrent.futures import ThreadPoolExecutor
 import logging
-from radar.config import settings
 
 logger = logging.getLogger(__name__)
 
-class TelegramReporter:
-    """Sends alerts and reports via Telegram Bot."""
+COMMON_PORTS = {
+    21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS",
+    80: "HTTP", 110: "POP3", 139: "NetBIOS", 443: "HTTPS", 
+    445: "SMB", 3389: "RDP", 8080: "HTTP-Proxy"
+}
 
-    BASE_URL = "https://api.telegram.org/bot"
+class PortScanner:
+    """Scans a target IP for open common ports."""
+    
+    def __init__(self, target_ip: str):
+        self.target_ip = target_ip
+        self.open_ports = []
 
-    def __init__(self):
-        self.token = settings.telegram.bot_token
-        self.chat_id = settings.telegram.chat_id
+    def _scan_port(self, port: int):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        result = sock.connect_ex((self.target_ip, port))
+        if result == 0:
+            service = COMMON_PORTS.get(port, "Unknown")
+            self.open_ports.append({"port": port, "service": service})
+        sock.close()
 
-    def send_message(self, text: str):
-        """Sends a plain text message."""
-        if not self.token or not self.chat_id:
-            return
-        try:
-            url = f"{self.BASE_URL}{self.token}/sendMessage"
-            requests.post(url, json={"chat_id": self.chat_id, "text": text}, timeout=5)
-        except Exception as e:
-            logger.error(f"Telegram send failed: {e}")
-
-    def send_pdf(self, pdf_path: str, caption: str = "Daily Intel Report"):
-        """Sends a PDF file as a Telegram document."""
-        if not self.token or not self.chat_id:
-            return
-        try:
-            url = f"{self.BASE_URL}{self.token}/sendDocument"
-            with open(pdf_path, 'rb') as f:
-                requests.post(url, data={"chat_id": self.chat_id, "caption": caption},
-                              files={"document": f}, timeout=30)
-        except Exception as e:
-            logger.error(f"Telegram PDF send failed: {e}")
-
-    def alert_new_device(self, device_name: str, ip: str, mac: str):
-        msg = (
-            f"🚨 NEW DEVICE DETECTED\n"
-            f"Name: {device_name}\n"
-            f"IP: {ip}\n"
-            f"MAC: {mac}"
-        )
-        self.send_message(msg)
+    def scan(self):
+        logger.info(f"Scanning ports for {self.target_ip}...")
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            executor.map(self._scan_port, COMMON_PORTS.keys())
+        return self.open_ports
 ```
 
-**Integration in `radar/fingerprint/scanner.py`:** After `vault.upsert_network_device()`, add:
+**Integration in `radar/fingerprint/scanner.py`:**
 ```python
-from radar.utils.telegram_bot import TelegramReporter
-telegram = TelegramReporter()
-# ... after device is found for the first time:
-telegram.alert_new_device(record.device_name, record.ip_address, record.mac_address)
+from radar.fingerprint.port_scanner import PortScanner
+
+# After discovering a device:
+scanner = PortScanner(record.ip_address)
+open_ports = scanner.scan()
+# Store open_ports in the database for the dashboard
 ```
 
 ---
@@ -542,38 +517,74 @@ drawNetworkMap();
 
 ---
 
-## 5. 🧠 Machine Learning & Behavioral Anomaly Detection
+## 5. 📊 Data Export & Reporting
 
-### 5.1 Behavior Profiling (Detecting Compromised Devices)
+### 5.1 Excel Export for Network Devices
 
-**Goal:** Learn each device's "normal" behavior and alert when something unusual happens.
+**Goal:** Generate a well-documented, easy-to-read Excel spreadsheet containing all discovered network devices, their activity, and metadata for offline analysis or auditing.
 
-**New file: `radar/utils/anomaly_detector.py`**
+**Method:** Use the `pandas` and `openpyxl` libraries to query the SQLite database and format the data into a clean spreadsheet.
+
+**Features of the Excel Report:**
+*   **Auto-Formatting:** Adjusted column widths, bold headers, and alternating row colors for readability.
+*   **Comprehensive Data:** Includes MAC, IP, Device Name, Type, Manufacturer, First/Last Seen, and Traffic Summary.
+*   **Filtering:** Users can easily filter by device type or activity level within Excel.
+
+**New file: `radar/reports/excel_exporter.py`**
 ```python
-from collections import defaultdict
+import pandas as pd
+from datetime import datetime
+import logging
 from radar.database.vault import Vault
-from radar.utils.telegram_bot import TelegramReporter
 
-class AnomalyDetector:
-    """
-    Learns each device's normal hourly activity patterns and
-    fires alerts when significant deviations are detected.
-    """
+logger = logging.getLogger(__name__)
+
+class ExcelExporter:
+    """Exports network intelligence to a formatted Excel file."""
+    
     def __init__(self, vault: Vault):
         self.vault = vault
-        self.baseline = defaultdict(lambda: defaultdict(float))  # mac → hour → avg_bytes
-        self.telegram = TelegramReporter()
 
-    def train(self):
-        """Build baselines from historical data."""
-        # Compute average bytes per hour per device from past 7 days
-        pass  # Implementation uses vault.get_device_flows()
+    def export_devices(self, output_path: str = "radar_network_audit.xlsx"):
+        logger.info("Generating Excel report of network devices...")
+        devices = self.vault.get_network_devices()
+        
+        # Prepare data for pandas
+        data = []
+        for d in devices:
+            data.append({
+                "MAC Address": d.mac_address,
+                "IP Address": d.ip_address,
+                "Device Name": d.device_name or "Unknown",
+                "Device Type": d.device_type,
+                "Manufacturer": d.manufacturer or "Unknown",
+                "Confidence (%)": d.confidence,
+                "Last Activity": d.last_activity or "Idle",
+                "First Seen": d.first_seen.strftime("%Y-%m-%d %H:%M:%S"),
+                "Last Seen": d.last_seen.strftime("%Y-%m-%d %H:%M:%S"),
+                "Total Bytes": d.total_bytes
+            })
+            
+        df = pd.DataFrame(data)
+        
+        # Write to Excel with formatting
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name="Network Devices")
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets["Network Devices"]
+            for idx, col in enumerate(df.columns):
+                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                worksheet.column_dimensions[chr(65 + idx)].width = max_len
+                
+        logger.info(f"Excel report saved to {output_path}")
+        return output_path
+```
 
-    def check(self):
-        """Check current activity against baseline. Alert on anomalies."""
-        # Compare live DPI traffic against trained baseline
-        # If current_bytes > 3 * baseline_avg: alert!
-        pass
+**Makefile command to add:**
+```makefile
+export: ## Export network devices to Excel
+    @sudo PYTHONPATH=. $(PYTHON) -c "from radar.database.vault import Vault; from radar.reports.excel_exporter import ExcelExporter; ExcelExporter(Vault()).export_devices()"
 ```
 
 ---
@@ -586,11 +597,11 @@ class AnomalyDetector:
 | **1** | OS Fingerprinting | `traffic.py` | 🟢 Easy |
 | **2** | DNS Spoofer | `fingerprint/dns_spoofer.py` | 🟡 Medium |
 | **2** | Captive Portal | `fingerprint/portal.py` | 🟡 Medium |
-| **2** | Telegram Bot | `utils/telegram_bot.py` | 🟡 Medium |
+| **2** | Excel Export | `reports/excel_exporter.py` | 🟢 Easy |
 | **3** | WebSocket Live Feed | `web/app.py` | 🟡 Medium |
 | **3** | D3.js Network Map | `web/static/` | 🟡 Medium |
+| **4** | Automated Port Scan | `fingerprint/port_scanner.py` | 🟡 Medium |
 | **4** | Wi-Fi Deauth Kicker | `fingerprint/deauth.py` | 🔴 Hard |
-| **4** | Anomaly Detection | `utils/anomaly_detector.py` | 🔴 Hard |
 | **5** | eBPF Process Hiding | `utils/ebpf_hide.py` | 🔴 Very Hard |
 
 ---
