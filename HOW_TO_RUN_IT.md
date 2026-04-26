@@ -57,7 +57,6 @@ To start collecting data, you need to turn on the "Intelligence Daemon." Since i
 ```bash
 make brain
 ```
-*   **What it does:** This starts the monitoring loops. You will see text scrolling by as it finds devices and tracks your activity.
 *   **Keep this open:** You must leave this terminal window open for the Brain to stay awake.
 
 ### 5. Turning on "The Eyes" (The Dashboard)
@@ -66,8 +65,6 @@ In a **new terminal window** (keep the first one running!), go to the Radar fold
 ```bash
 make live-root
 ```
-*   **What it does:** This starts the local web server so you can view your data.
-*   **Why `sudo`?** Even the dashboard needs root rights to allow you to trigger manual network scans from the web interface.
 
 ---
 
@@ -79,21 +76,33 @@ Once both parts are running:
 2.  In the address bar at the top, type: `http://localhost:8000`
 3.  Press **Enter**.
 
-You should now see the **Radar Intelligence Dashboard**! You can see live network activity, app usage charts, and system health metrics.
+---
+
+## 🎯 Advanced: Tactical Intercept (ARP Spoofing)
+
+Radar has a powerful feature called **Tactical Intercept**. This allows you to "redirect" the internet traffic of another device on your network through your computer so Radar can analyze it in real-time.
+
+**How to use it:**
+1.  Find the IP address of the device you want to intercept (from your Dashboard).
+2.  Run this command (replace the IP with the target's IP):
+    ```bash
+    make intercept IP=192.168.1.50
+    ```
+3.  **What happens?** Radar will perform "ARP Spoofing" to trick the target device into sending its data to you. Radar will then analyze the traffic and pass it along to the router so the target device doesn't lose internet connection.
+
+*Note: Use this feature responsibly and only on networks you own!*
 
 ---
 
 ## 🛡️ The "One Command" Way (Recommended)
 
-If you don't want to keep two terminal windows open, you can install Radar as a **Permanent Background Service**. This is the most "pro" way to run it.
+For the easiest experience, install Radar as a **Permanent Background Service**:
 
-Run this command:
 ```bash
 make install
 ```
-*   **What happens?** Radar will merge the Brain and the Dashboard together and run them silently in the background.
-*   **Stealth:** It will disguise its process name as something generic (like `kworker/sys`) so it stays hidden.
-*   **Auto-Start:** Radar will now start automatically every time you turn on your computer!
+*   **Stealth:** It will disguise its process name as `kworker/sys` to stay hidden.
+*   **Auto-Start:** Radar will start automatically every time you turn on your computer!
 
 ---
 
@@ -104,19 +113,11 @@ make install
 | **Setup** | `make setup` | Installs everything for the first time. |
 | **Start Engine** | `make brain` | Starts the "Brain" to gather data (Requires Root). |
 | **Start View** | `make live-root` | Starts the "Dashboard" to see data (Requires Root). |
+| **Intercept** | `make intercept IP=X` | Redirects traffic from another device (ARP Spoof). |
 | **Full Install** | `make install` | Runs everything silently in the background forever. |
 | **Check Logs** | `make logs` | See what the Brain is thinking right now. |
 | **Check Status** | `make status` | Is Radar running right now? |
 | **Stop** | `make stop` | Stops the background service. |
 | **Uninstall** | `make uninstall` | Completely removes Radar from your system. |
-
----
-
-## ❓ Troubleshooting (If things go wrong)
-
-*   **"Permission Denied":** This means you forgot to use a command that requires `sudo` or didn't enter the correct password.
-*   **"Command not found":** Make sure you are inside the Radar folder. Type `pwd` to check your current location.
-*   **"Port 8000 already in use":** This means Radar is already running. Run `make stop` to clear it out.
-*   **Dashboard is empty:** Give Radar a few minutes. It needs time to perform its first network sweep and gather enough data to show you a chart.
 
 Enjoy your new stealthy network intelligence tool! 📡
