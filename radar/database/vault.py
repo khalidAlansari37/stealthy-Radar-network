@@ -232,3 +232,40 @@ class Vault:
     def cleanup_old_flows(self, hours: int = 48):
         query = "DELETE FROM network_flows WHERE timestamp < datetime('now', ?)"
         self._execute(query, (f'-{hours} hours',))
+
+    # --- DNS Log ---
+    def insert_dns_log(self, src_ip: str, domain: str, query_type: str = "A"):
+        """Inserts a raw DNS query record into the dns_log table."""
+        self._execute(
+            "INSERT INTO dns_log (src_ip, domain, query_type) VALUES (?, ?, ?)",
+            (src_ip, domain, query_type)
+        )
+
+    def get_dns_log(self, src_ip: str, limit: int = 200) -> list:
+        """Returns the DNS history for a given source IP, newest first."""
+        query = "SELECT * FROM dns_log WHERE src_ip = ? ORDER BY timestamp DESC LIMIT ?"
+        cursor = self.conn.cursor()
+        cursor.execute(query, (src_ip, limit))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_dns_log_all(self, limit: int = 500) -> list:
+        """Returns recent DNS queries from ALL devices."""
+        query = "SELECT * FROM dns_log ORDER BY timestamp DESC LIMIT ?"
+        cursor = self.conn.cursor()
+        cursor.execute(query, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    # --- OS Guess & Port Scan updates ---
+    def update_os_guess(self, ip: str, os_guess: str):
+        """Updates the passive OS fingerprint for a device by IP."""
+        self._execute(
+            "UPDATE network_devices SET os_guess = ? WHERE ip_address = ?",
+            (os_guess, ip)
+        )
+
+    def update_open_ports(self, mac: str, ports_json: str):
+        """Stores the port scan result (JSON string) for a device."""
+        self._execute(
+            "UPDATE network_devices SET open_ports = ? WHERE mac_address = ?",
+            (ports_json, mac)
+        )

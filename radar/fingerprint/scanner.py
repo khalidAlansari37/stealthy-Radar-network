@@ -12,6 +12,10 @@ from radar.fingerprint.traffic import lookup_oui
 
 logger = logging.getLogger(__name__)
 
+# Port scan runs in a thread pool so it never blocks the ARP sweep.
+import concurrent.futures
+_port_scan_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="radar-portscan")
+
 class ArpScanner:
     """Performs ARP scanning to identify active devices on the local network."""
     
@@ -134,6 +138,8 @@ class ArpScanner:
                         f"Device: {ip} | {mac} | {manufacturer} | "
                         f"{record.device_name} | {record.last_activity or 'Idle'}"
                     )
+                    # ── Background Port Scan ──────────────────────────────────
+                    _port_scan_executor.submit(self._scan_ports_bg, mac, ip)
                 except Exception as e:
                     logger.error(f"Failed to upsert network device {mac}: {e}")
             
@@ -146,6 +152,20 @@ class ArpScanner:
         except Exception as e:
             logger.error(f"Unexpected error during scan: {e}")
             return []
+
+    def _scan_ports_bg(self, mac: str, ip: str):
+        """Runs a port scan for a device in the background and stores results."""
+        try:
+            import json
+            from radar.fingerprint.port_scanner import PortScanner
+            scanner = PortScanner(ip)
+            results = scanner.scan()
+            if results:
+                self.vault.update_open_ports(mac, json.dumps(results))
+                logger.info(f"[PortScan] {ip} → {scanner.summary()}")
+        except Exception as e:
+            logger.debug(f"Background port scan failed for {ip}: {e}")
+
 
 # Stand-alone test
 if __name__ == "__main__":

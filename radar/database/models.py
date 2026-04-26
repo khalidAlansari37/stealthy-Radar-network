@@ -45,6 +45,8 @@ class NetworkDeviceRecord(BaseModel):
     total_bytes: int = 0
     ttl: Optional[int] = None
     netbios_name: Optional[str] = None
+    os_guess: Optional[str] = None        # Passive OS fingerprint (e.g. "Windows", "iOS")
+    open_ports: Optional[str] = None      # JSON list of open ports from port scan
 
     @classmethod
     def from_row(cls, row: dict):

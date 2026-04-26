@@ -113,28 +113,36 @@ def create_tables(conn: sqlite3.Connection):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_flow_src_ip ON network_flows(src_ip)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_flow_timestamp ON network_flows(timestamp)")
 
-    # 8. Schema Evolution (Add missing columns to existing DBs)
-    try:
-        cursor.execute("ALTER TABLE network_devices ADD COLUMN last_activity TEXT")
-    except sqlite3.OperationalError:
-        pass # Already exists
+    # 8. Passive DNS Log (full browsing history per device)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dns_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp  DATETIME DEFAULT (datetime('now')),
+        src_ip     TEXT NOT NULL,
+        domain     TEXT NOT NULL,
+        query_type TEXT DEFAULT 'A'
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dns_src_ip ON dns_log(src_ip)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dns_timestamp ON dns_log(timestamp)")
 
-    try:
-        cursor.execute("ALTER TABLE network_devices ADD COLUMN traffic_summary TEXT")
-    except sqlite3.OperationalError:
-        pass # Already exists
-
-    try:
-        cursor.execute("ALTER TABLE network_flows ADD COLUMN byte_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass # Already exists
-
-    try:
-        cursor.execute("ALTER TABLE network_devices ADD COLUMN total_bytes INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass # Already exists
+    # 9. Schema Evolution (Add missing columns to existing DBs)
+    _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN last_activity TEXT")
+    _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN traffic_summary TEXT")
+    _safe_alter(cursor, "ALTER TABLE network_flows ADD COLUMN byte_count INTEGER DEFAULT 0")
+    _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN total_bytes INTEGER DEFAULT 0")
+    _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN os_guess TEXT")
+    _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN open_ports TEXT")
 
     conn.commit()
+
+
+def _safe_alter(cursor, sql: str):
+    """Runs an ALTER TABLE statement, silently ignoring 'column already exists' errors."""
+    try:
+        cursor.execute(sql)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     import os

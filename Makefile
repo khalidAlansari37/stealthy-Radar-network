@@ -32,6 +32,21 @@ brain: ## Launch the Intelligence Daemon with FULL PERMISSIONS (Sudo)
 intercept: ## Unlock 'Outside' traffic for a specific IP (usage: make intercept IP=192.168.1.10)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.tactical $(IP)
 
+spoof: ## Start DNS Spoofer after intercept (usage: make spoof IP=192.168.1.5 RULES="facebook.com=192.168.1.1")
+	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.dns_spoofer $(IP) $(RULES)
+
+portal: ## Start captive portal web server (usage: make portal  or  make portal PORT=80)
+	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.portal $(if $(PORT),--port $(PORT),)
+
+kick: ## Kick a device off Wi-Fi — requires monitor mode (usage: make kick MAC=AA:BB:CC TARGET=XX:YY:ZZ IFACE=wlan0mon)
+	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.deauth $(MAC) $(TARGET) $(if $(IFACE),$(IFACE),wlan0mon)
+
+scan: ## Run a quick port scan on a specific IP (usage: make scan IP=192.168.1.50)
+	@PYTHONPATH=. $(PYTHON) -m radar.fingerprint.port_scanner $(IP)
+
+export: ## Export all network devices to a formatted Excel spreadsheet
+	@PYTHONPATH=. $(PYTHON) -m radar.reports.excel_exporter
+
 live-term: ## Watch everything in real-time (Legacy Terminal UI)
 	@PYTHONPATH=. $(PYTHON) -m radar.utils.dashboard
 

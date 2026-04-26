@@ -337,6 +337,9 @@ class TrafficSentinel:
         # IP → MAC cache (needed to upsert new devices seen purely via traffic)
         self.ip_to_mac: Dict[str, str] = {}
 
+        # Initialize OS fingerprint cache
+        self.os_fingerprints: Dict[str, str] = {}
+
         # Gateway IP (set externally by ArpScanner)
         self.gateway_ip: Optional[str] = None
 
@@ -508,10 +511,15 @@ class TrafficSentinel:
         # ── 3. DNS Analysis ───────────────────────────────────────────────────
         if pkt.haslayer(DNS):
             dns = pkt.getlayer(DNS)
-            # a) Query analysis (for activity)
+            # a) Query analysis (for activity + DNS log)
             if dns.qr == 0:
                 try:
                     query = pkt.getlayer(DNSQR).qname.decode("utf-8", errors="ignore").rstrip(".").lower()
+                    # Log every raw domain to the database
+                    try:
+                        self.vault.insert_dns_log(src_ip, query)
+                    except Exception:
+                        pass
                     activity = self._classify_domain(query)
                     if activity:
                         with self._lock:
@@ -532,16 +540,14 @@ class TrafficSentinel:
                 except Exception:
                     pass
 
-        # ── 4. TLS SNI Extraction (if TLS layer available) ────────────────────
+        # ── 5. TLS SNI Extraction (if TLS layer available) ────────────────────
         if HAS_TLS and TLSClientHello and pkt.haslayer(TLSClientHello):
             try:
                 sni_raw = getattr(pkt[TLSClientHello], "servername", None)
                 if sni_raw:
                     sni = sni_raw.decode("utf-8", errors="ignore").lower()
-                    # Also map this destination IP to the SNI hostname
                     with self._lock:
                         self.dns_cache[dst_ip] = sni
-                        
                     activity = self._classify_domain(sni)
                     if activity:
                         with self._lock:
@@ -549,6 +555,33 @@ class TrafficSentinel:
                         logger.debug(f"[SNI] {src_ip} → {activity} via {sni}")
             except Exception:
                 pass
+
+        # ── 6. Passive OS Fingerprinting (TTL + TCP Window) ───────────────────
+        if pkt.haslayer(TCP) and pkt[TCP].flags == 0x02:  # SYN packets only
+            ttl = pkt[IP].ttl
+            window = pkt[TCP].window
+            if ttl >= 100:          # Windows starts at TTL 128
+                os_guess = "Windows"
+            elif ttl >= 50:         # Linux/Android/macOS start at TTL 64
+                if window == 65535:
+                    os_guess = "macOS / iOS (iPhone/iPad)"
+                elif window >= 29000:
+                    os_guess = "Linux / Android"
+                else:
+                    os_guess = "Linux (Custom)"
+            else:
+                os_guess = "Unknown OS"
+
+            with self._lock:
+                prev = self.os_fingerprints.get(src_ip)
+                if prev != os_guess:
+                    self.os_fingerprints[src_ip] = os_guess
+                    logger.info(f"[OS-FP] {src_ip} → {os_guess} (TTL={ttl}, WIN={window})")
+                    # Persist to database in the background
+                    try:
+                        self.vault.update_os_guess(src_ip, os_guess)
+                    except Exception:
+                        pass
 
     # ── Classification helpers ────────────────────────────────────────────────
 

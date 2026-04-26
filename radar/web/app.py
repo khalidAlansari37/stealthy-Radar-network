@@ -1,9 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from datetime import datetime
+import asyncio
+import json
 import psutil
 import os
 import threading
@@ -242,6 +244,88 @@ async def trigger_scan():
     except Exception as e:
         logger.error(f"Manual scan failed: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/device/{mac:path}/dns-history")
+async def get_device_dns_history(mac: str):
+    """Returns the full passive DNS history for a device (by MAC → IP lookup)."""
+    devices = vault.get_network_devices()
+    device = next((d for d in devices if d.mac_address == mac), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    rows = vault.get_dns_log(device.ip_address, limit=500)
+    return {"ip": device.ip_address, "device": device.device_name, "dns_history": rows}
+
+
+@app.get("/api/device/{mac:path}/ports")
+async def get_device_ports(mac: str):
+    """Returns the port scan results for a device."""
+    devices = vault.get_network_devices()
+    device = next((d for d in devices if d.mac_address == mac), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    ports = []
+    if device.open_ports:
+        try:
+            ports = json.loads(device.open_ports)
+        except Exception:
+            pass
+    return {"ip": device.ip_address, "device": device.device_name, "open_ports": ports}
+
+
+@app.get("/api/dns/recent")
+async def get_recent_dns():
+    """Returns the most recent DNS queries from all devices on the network."""
+    rows = vault.get_dns_log_all(limit=200)
+    return {"count": len(rows), "entries": rows}
+
+
+# ── WebSocket Live Feed ───────────────────────────────────────────────────────
+
+@app.websocket("/ws/live-feed")
+async def live_feed(websocket: WebSocket):
+    """
+    Streams real-time network + system stats to the dashboard every second.
+    The frontend can connect to ws://localhost:8000/ws/live-feed instead of polling.
+    """
+    await websocket.accept()
+    logger.info("WebSocket client connected to live feed.")
+    try:
+        while True:
+            today = datetime.now().date().isoformat()
+            all_devices = vault.get_network_devices()
+            active = [d for d in all_devices if d.last_seen.date().isoformat() == today]
+
+            metrics = vault.get_system_metrics(today)
+            last_metric = metrics[-1] if metrics else None
+
+            payload = {
+                "timestamp": datetime.now().isoformat(),
+                "active_devices": len(active),
+                "system": {
+                    "cpu":     last_metric.cpu_percent if last_metric else 0,
+                    "ram":     last_metric.ram_percent if last_metric else 0,
+                    "battery": last_metric.battery_percent if last_metric else 0,
+                },
+                "device_list": [
+                    {
+                        "name":       d.device_name or "Unknown",
+                        "ip":         d.ip_address,
+                        "mac":        d.mac_address,
+                        "type":       d.device_type,
+                        "os":         d.os_guess or "Unknown",
+                        "activity":   d.last_activity or "Idle",
+                        "bandwidth":  d.total_bytes,
+                    }
+                    for d in sorted(active, key=lambda x: x.total_bytes or 0, reverse=True)[:20]
+                ],
+            }
+            await websocket.send_text(json.dumps(payload, default=str))
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected.")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+
 
 # ── SPA CATCH-ALL (must be LAST) ─────────────────────────────────────────────
 
