@@ -1,66 +1,105 @@
-# How to Run Radar (Easy Guide)
+# 🛰️ Radar: Your Ultimate Linux Stealth Intelligence Guide
 
-Welcome to **Radar**! This guide will explain what Radar is and how you can easily run it on your Linux computer without needing to be a software developer.
-
-## What is Radar?
-
-Radar is a smart, invisible assistant that monitors your computer and your local Wi-Fi network. It runs quietly in the background and helps you answer questions like:
-- **Who is on my Wi-Fi?** It detects phones, computers, smart TVs, and other devices connected to your network.
-- **What am I spending time on?** It tracks which apps you use and how long you spend on them.
-- **How is my computer doing?** It keeps an eye on your battery, CPU, and RAM to make sure everything is healthy.
-
-All of this information is collected privately and shown to you in a beautiful, easy-to-read web dashboard.
+Welcome to **Radar**! This guide is designed to help you set up and run the Radar system with ease. Whether you are a security enthusiast or just want to keep an eye on your home network, this document will walk you through everything you need to know in simple, plain language.
 
 ---
 
-## How to Use Radar on Linux
+## 🔍 What is Radar?
 
-We've made starting Radar as simple as possible. Just follow these steps:
+Imagine having a silent, invisible security guard living inside your computer. **Radar** is exactly that. It runs quietly in the background (stealth mode) and gathers intelligence about two main things:
 
-### Step 1: Open your Terminal
-On your Linux system (like Ubuntu), press `Ctrl + Alt + T` to open your Terminal window.
+1.  **Your Local Network:** It scans your Wi-Fi to see every device connected to it (Phones, Laptops, Smart TVs, IoT devices). It can even tell you the manufacturer of the device (like Apple, Samsung, or Sony).
+2.  **Your Computer Usage:** It monitors which applications you are using, how much time you spend on them, and even takes "health snapshots" of your system (CPU, RAM, and Battery).
 
-### Step 2: Go to the Radar Folder
-You need to be in the folder where Radar is located. If it's on your Desktop, you would type:
+All of this data is stored locally on your machine—never in the cloud—and is presented to you through a sleek, professional web dashboard.
+
+---
+
+## 🛠️ Prerequisites (What you need)
+
+Before we start, make sure you have:
+- A computer running **Linux** (Ubuntu, Mint, Debian, etc.).
+- A working **Internet connection**.
+- **Administrator (Root) Access:** Since Radar needs to "listen" to your network hardware, you will need your computer's password.
+
+---
+
+## 🚀 How to Run Radar (The Step-by-Step Way)
+
+### 1. Open Your Command Center (Terminal)
+The Terminal is where the magic happens. You can usually open it by pressing `Ctrl + Alt + T` on your keyboard.
+
+### 2. Enter the Radar Directory
+You need to tell the terminal where the Radar files are. If you downloaded it to your Desktop, type:
 ```bash
 cd ~/Desktop/Radar
 ```
-*(Press Enter after typing the command)*
 
-### Step 3: Install the Requirements (One-time only)
-Before running Radar for the first time, it needs to download some standard tools to do its job. Type this command and press Enter:
+### 3. The Initial Setup (First Time Only)
+Radar needs a few tools and "libraries" to work correctly. We have simplified this into a single command:
 ```bash
 make setup
 ```
-Wait a minute or two for this to finish. You only ever have to do this once!
+*Wait for this to finish. It will create a "virtual environment" so Radar doesn't interfere with your other computer programs.*
 
-### Step 4: Start Radar and the Dashboard
-Now, let's turn it on so you can see your data. Type this command:
+### 4. Running Radar with Root Rights (CRITICAL)
+Radar needs to perform deep network scans to find other devices. To do this, it requires **Root Privileges** (also known as `sudo`). This is why you must run the following command:
+
 ```bash
 make live-root
 ```
-*Note: Because Radar needs to scan the network, it will ask for your computer's administrator password (sudo password). Type it in and press Enter.*
-
-### Step 5: View Your Data!
-Open your favorite web browser (like Chrome or Firefox) and go to this exact address:
-👉 **http://localhost:8000**
-
-You will now see the Radar Dashboard with all your network and computer statistics!
+*   **Why `sudo`?** Standard users aren't allowed to look at raw network traffic for security reasons. By using `sudo`, you are giving Radar permission to see who is on your Wi-Fi.
+*   **Password:** When you run this, the terminal will ask for your password. **Note:** When you type your password, you won't see any stars or characters. This is normal! Just type it and hit **Enter**.
 
 ---
 
-## Advanced (But Still Easy): Make it Run Forever
+## 📊 Viewing Your Intelligence Dashboard
 
-If you want Radar to run in the background automatically every time you turn on your computer (so you never have to open the terminal again), do this:
+Once Radar is running, it starts a local web server. To see your data:
 
-1. Open the Terminal and go to the Radar folder (`cd ~/Desktop/Radar`).
-2. Run this command:
-```bash
-make install
-```
-That's it! Radar is now permanently installed as a silent background service. You can visit `http://localhost:8000` at any time to see your dashboard.
+1.  Open your Web Browser (Chrome, Firefox, etc.).
+2.  In the address bar at the top, type: `http://localhost:8000`
+3.  Press **Enter**.
 
-If you ever want to completely remove it, just type:
-```bash
-make uninstall
-```
+You should now see the **Radar Intelligence Dashboard**! You can see live network activity, app usage charts, and system health metrics.
+
+---
+
+## 🛡️ Advanced: Installing as a Permanent Background Service
+
+If you love Radar and want it to run **automatically** every time you turn on your computer, you can install it as a "System Service."
+
+1.  In your terminal, run:
+    ```bash
+    make install
+    ```
+2.  Radar will now be "cloaked." It will run in the background without any terminal window open.
+3.  It will even disguise its process name as something generic (like `kworker/sys`) to stay hidden from casual observation.
+
+**To stop or remove it later:**
+- To check status: `make status`
+- To stop it: `make stop`
+- To completely uninstall: `make uninstall`
+
+---
+
+## ❓ Troubleshooting (If things go wrong)
+
+*   **"Permission Denied":** This means you forgot to use `make live-root` or didn't enter the correct password.
+*   **"Command not found":** Make sure you are inside the Radar folder. Type `pwd` to check your current location.
+*   **"Port 8000 already in use":** This means Radar is already running, or another program is using that slot. Try restarting your computer or running `make stop`.
+*   **Dashboard is empty:** Give Radar a few minutes. It needs time to perform its first network sweep and gather enough data to show you a chart.
+
+---
+
+## 📜 Summary of Commands
+
+| Goal | Command |
+| :--- | :--- |
+| **Setup** | `make setup` |
+| **Run (Dashboard)** | `make live-root` |
+| **Install Permanently** | `make install` |
+| **Check Logs** | `make logs` |
+| **Clean Up** | `make uninstall` |
+
+Enjoy your new stealthy network intelligence tool! 📡
