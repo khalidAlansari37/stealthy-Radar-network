@@ -528,3 +528,64 @@ h2 {
     justify-content: space-between;
     align-items: center;
 }
+
+/* Ports Section */
+.ports-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 15px 0;
+}
+
+.port-badge {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid var(--accent-blue);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.port-num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+.port-srv {
+    color: var(--text-primary);
+}
+
+/* D3.js Network Map */
+.d3-tooltip {
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-blue);
+    box-shadow: var(--glow-blue);
+    padding: 12px;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    z-index: 100;
+}
+
+.d3-tooltip h4 { margin-bottom: 5px; color: var(--accent-blue); }
+.d3-tooltip p { margin-bottom: 3px; color: var(--text-secondary); }
+.d3-tooltip .mono { color: var(--text-primary); }
+
+.node {
+    cursor: pointer;
+    transition: filter 0.2s;
+}
+.node:hover {
+    filter: brightness(1.5);
+}
+.link {
+    stroke: var(--border-glass);
+    stroke-opacity: 0.6;
+}

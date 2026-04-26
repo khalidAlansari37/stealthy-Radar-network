@@ -72,6 +72,11 @@ function handleRoute() {
         state.selectedMac = null;
         const nav = document.getElementById('nav-history');
         if (nav) nav.classList.add('active');
+    } else if (hash === '#/map') {
+        state.view = 'map';
+        state.selectedMac = null;
+        const nav = document.getElementById('nav-map');
+        if (nav) nav.classList.add('active');
     } else {
         state.view = 'home';
         state.selectedMac = null;
@@ -107,6 +112,15 @@ async function refreshData() {
             
             if (resDetail.ok) {
                 const detail = await resDetail.json();
+                
+                // Fetch ports separately (it's a new endpoint)
+                fetch(API.deviceDetail(state.selectedMac) + "/ports")
+                    .then(r => r.json())
+                    .then(portData => {
+                        updatePortsView(portData.open_ports);
+                    })
+                    .catch(() => updatePortsView(null));
+
                 updateDetailView(detail, resFlows);
             }
         } else if (state.view === 'intelligence' && state.selectedMac) {
@@ -159,6 +173,11 @@ function render() {
             container.innerHTML = document.getElementById('tpl-detail').innerHTML;
             const b1 = document.getElementById('btn-back');
             if (b1) b1.onclick = () => window.location.hash = '#/';
+            break;
+
+        case 'map':
+            container.innerHTML = document.getElementById('tpl-map').innerHTML;
+            renderNetworkMap();
             break;
 
         case 'intelligence':
@@ -394,6 +413,7 @@ function updateDetailView(data) {
     setElText('det-ip', d.ip_address);
     setElText('det-mac', d.mac_address);
     setElText('det-type', d.device_type || 'Unknown');
+    setElText('det-os', d.os_guess || 'Scanning / Unknown');
     setElText('det-confidence', `${d.confidence}%`);
     setElText('det-first-seen', new Date(d.first_seen).toLocaleString());
     setElText('det-last-seen', new Date(d.last_seen).toLocaleString());
@@ -596,5 +616,160 @@ function updateDetailFlows(flows) {
                 <td><span class="badge highlight">${f.protocol}</span></td>
             </tr>
         `;
-    }).join('');
+}
+
+function updatePortsView(ports) {
+    if (state.view !== 'detail') return;
+    const container = document.getElementById('det-ports-container');
+    if (!container) return;
+
+    if (!ports || ports.length === 0) {
+        container.innerHTML = '<span class="dim small">No common ports found open.</span>';
+        return;
+    }
+
+    container.innerHTML = ports.map(p => `
+        <div class="port-badge">
+            <span class="port-num">${p.port}</span>
+            <span class="port-srv">${p.service}</span>
+        </div>
+    `).join('');
+}
+
+// --- D3 Network Map ---
+function renderNetworkMap() {
+    const container = document.getElementById('d3-container');
+    const tooltip = document.getElementById('d3-tooltip');
+    if (!container || !window.d3) return;
+    container.innerHTML = '';
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Identify Router/Gateway (usually high traffic + lowest IP ending)
+    let routerMac = null;
+    let maxConf = -1;
+    state.devices.forEach(d => {
+        if (d.ip_address.endsWith('.1') && d.confidence > maxConf) {
+            routerMac = d.mac_address;
+            maxConf = d.confidence;
+        }
+    });
+
+    // Build graph data
+    const nodes = state.devices.map(d => ({
+        id: d.mac_address,
+        name: getDisplayName(d),
+        ip: d.ip_address,
+        os: d.os_guess || 'Unknown',
+        isRouter: d.mac_address === routerMac,
+        isOnline: (new Date() - new Date(d.last_seen)) < ONLINE_THRESHOLD_MS,
+        icon: getDeviceIcon(d),
+        bandwidth: d.total_bytes
+    }));
+
+    const links = [];
+    nodes.forEach(n => {
+        if (!n.isRouter && routerMac) {
+            links.push({ source: n.id, target: routerMac });
+        }
+    });
+
+    const svg = d3.select('#d3-container')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    // Zoom container
+    const g = svg.append('g');
+    svg.call(d3.zoom().on('zoom', (e) => g.attr('transform', e.transform)));
+
+    const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(150))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collide', d3.forceCollide().radius(40));
+
+    // Links
+    const link = g.append('g')
+        .attr('class', 'links')
+        .selectAll('line')
+        .data(links)
+        .enter().append('line')
+        .attr('class', 'link');
+
+    // Nodes
+    const node = g.append('g')
+        .attr('class', 'nodes')
+        .selectAll('g')
+        .data(nodes)
+        .enter().append('g')
+        .attr('class', 'node')
+        .call(d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended))
+        .on('click', (event, d) => {
+            window.location.hash = `#/device/${encodeURIComponent(d.id)}`;
+        })
+        .on('mouseover', (event, d) => {
+            const mb = d.bandwidth ? (d.bandwidth / (1024*1024)).toFixed(2) : 0;
+            tooltip.style.opacity = 1;
+            tooltip.innerHTML = `
+                <h4>${d.name}</h4>
+                <p>IP: <span class="mono">${d.ip}</span></p>
+                <p>OS: <span class="mono">${d.os}</span></p>
+                <p>Traffic: <span class="mono">${mb} MB</span></p>
+            `;
+            const containerRect = container.getBoundingClientRect();
+            tooltip.style.left = (event.clientX - containerRect.left + 15) + 'px';
+            tooltip.style.top = (event.clientY - containerRect.top + 15) + 'px';
+        })
+        .on('mouseout', () => tooltip.style.opacity = 0);
+
+    // Circles
+    node.append('circle')
+        .attr('r', d => d.isRouter ? 30 : 20)
+        .attr('fill', d => d.isRouter ? '#00d4ff' : (d.isOnline ? '#00ff88' : '#333'))
+        .attr('fill-opacity', 0.2)
+        .attr('stroke', d => d.isRouter ? '#00d4ff' : (d.isOnline ? '#00ff88' : '#555'))
+        .attr('stroke-width', 2);
+
+    // Icons
+    node.append('text')
+        .text(d => d.isRouter ? '🌐' : d.icon)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('font-size', d => d.isRouter ? '24px' : '16px');
+
+    // Labels
+    node.append('text')
+        .text(d => d.isRouter ? 'Gateway' : d.name)
+        .attr('y', d => d.isRouter ? 45 : 35)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#f0f2f5')
+        .attr('font-size', '11px')
+        .attr('font-family', 'Inter');
+
+    simulation.on('tick', () => {
+        link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+        node
+            .attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+    }
+    function dragged(event, d) {
+        d.fx = event.x; d.fy = event.y;
+    }
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+    }
 }
