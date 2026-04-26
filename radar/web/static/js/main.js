@@ -610,9 +610,8 @@ function updateDetailFlows(flows) {
                 <td class="mono small">${new Date(f.timestamp).toLocaleTimeString()}</td>
                 <td class="mono small">${f.dst_ip}:${f.dst_port}</td>
                 <td><span class="${isDomain ? 'highlight' : 'dim'}">${website}</span></td>
-                <td><span class="badge highlight">${f.protocol}</span></td>
-            </tr>
         `;
+    }).join('');
 }
 
 function updatePortsView(ports) {
