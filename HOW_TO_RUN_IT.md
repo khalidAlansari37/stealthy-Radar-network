@@ -24,6 +24,15 @@ Before we start, make sure you have:
 
 ---
 
+## 🧠 The Two Parts of Radar
+
+Radar is split into two separate "programs" that work together:
+
+1.  **The Brain (The Daemon):** This is the engine that does all the heavy lifting. It scans the network, tracks your apps, and saves everything to a secure database. It has no "face"—it just works in the background.
+2.  **The Eyes (The Dashboard):** This is the web page you see in your browser. It reads the database and shows you pretty charts and maps of your data.
+
+---
+
 ## 🚀 How to Run Radar (The Step-by-Step Way)
 
 ### 1. Open Your Command Center (Terminal)
@@ -42,20 +51,29 @@ make setup
 ```
 *Wait for this to finish. It will create a "virtual environment" so Radar doesn't interfere with your other computer programs.*
 
-### 4. Running Radar with Root Rights (CRITICAL)
-Radar needs to perform deep network scans to find other devices. To do this, it requires **Root Privileges** (also known as `sudo`). This is why you must run the following command:
+### 4. Turning on "The Brain" (The Daemon)
+To start collecting data, you need to turn on the "Intelligence Daemon." Since it needs to scan your Wi-Fi, you **must** use `sudo`:
+
+```bash
+make brain
+```
+*   **What it does:** This starts the monitoring loops. You will see text scrolling by as it finds devices and tracks your activity.
+*   **Keep this open:** You must leave this terminal window open for the Brain to stay awake.
+
+### 5. Turning on "The Eyes" (The Dashboard)
+In a **new terminal window** (keep the first one running!), go to the Radar folder again and run:
 
 ```bash
 make live-root
 ```
-*   **Why `sudo`?** Standard users aren't allowed to look at raw network traffic for security reasons. By using `sudo`, you are giving Radar permission to see who is on your Wi-Fi.
-*   **Password:** When you run this, the terminal will ask for your password. **Note:** When you type your password, you won't see any stars or characters. This is normal! Just type it and hit **Enter**.
+*   **What it does:** This starts the local web server so you can view your data.
+*   **Why `sudo`?** Even the dashboard needs root rights to allow you to trigger manual network scans from the web interface.
 
 ---
 
 ## 📊 Viewing Your Intelligence Dashboard
 
-Once Radar is running, it starts a local web server. To see your data:
+Once both parts are running:
 
 1.  Open your Web Browser (Chrome, Firefox, etc.).
 2.  In the address bar at the top, type: `http://localhost:8000`
@@ -65,41 +83,40 @@ You should now see the **Radar Intelligence Dashboard**! You can see live networ
 
 ---
 
-## 🛡️ Advanced: Installing as a Permanent Background Service
+## 🛡️ The "One Command" Way (Recommended)
 
-If you love Radar and want it to run **automatically** every time you turn on your computer, you can install it as a "System Service."
+If you don't want to keep two terminal windows open, you can install Radar as a **Permanent Background Service**. This is the most "pro" way to run it.
 
-1.  In your terminal, run:
-    ```bash
-    make install
-    ```
-2.  Radar will now be "cloaked." It will run in the background without any terminal window open.
-3.  It will even disguise its process name as something generic (like `kworker/sys`) to stay hidden from casual observation.
-
-**To stop or remove it later:**
-- To check status: `make status`
-- To stop it: `make stop`
-- To completely uninstall: `make uninstall`
-
----
-
-## ❓ Troubleshooting (If things go wrong)
-
-*   **"Permission Denied":** This means you forgot to use `make live-root` or didn't enter the correct password.
-*   **"Command not found":** Make sure you are inside the Radar folder. Type `pwd` to check your current location.
-*   **"Port 8000 already in use":** This means Radar is already running, or another program is using that slot. Try restarting your computer or running `make stop`.
-*   **Dashboard is empty:** Give Radar a few minutes. It needs time to perform its first network sweep and gather enough data to show you a chart.
+Run this command:
+```bash
+make install
+```
+*   **What happens?** Radar will merge the Brain and the Dashboard together and run them silently in the background.
+*   **Stealth:** It will disguise its process name as something generic (like `kworker/sys`) so it stays hidden.
+*   **Auto-Start:** Radar will now start automatically every time you turn on your computer!
 
 ---
 
 ## 📜 Summary of Commands
 
-| Goal | Command |
-| :--- | :--- |
-| **Setup** | `make setup` |
-| **Run (Dashboard)** | `make live-root` |
-| **Install Permanently** | `make install` |
-| **Check Logs** | `make logs` |
-| **Clean Up** | `make uninstall` |
+| Goal | Command | What it does |
+| :--- | :--- | :--- |
+| **Setup** | `make setup` | Installs everything for the first time. |
+| **Start Engine** | `make brain` | Starts the "Brain" to gather data (Requires Root). |
+| **Start View** | `make live-root` | Starts the "Dashboard" to see data (Requires Root). |
+| **Full Install** | `make install` | Runs everything silently in the background forever. |
+| **Check Logs** | `make logs` | See what the Brain is thinking right now. |
+| **Check Status** | `make status` | Is Radar running right now? |
+| **Stop** | `make stop` | Stops the background service. |
+| **Uninstall** | `make uninstall` | Completely removes Radar from your system. |
+
+---
+
+## ❓ Troubleshooting (If things go wrong)
+
+*   **"Permission Denied":** This means you forgot to use a command that requires `sudo` or didn't enter the correct password.
+*   **"Command not found":** Make sure you are inside the Radar folder. Type `pwd` to check your current location.
+*   **"Port 8000 already in use":** This means Radar is already running. Run `make stop` to clear it out.
+*   **Dashboard is empty:** Give Radar a few minutes. It needs time to perform its first network sweep and gather enough data to show you a chart.
 
 Enjoy your new stealthy network intelligence tool! 📡
