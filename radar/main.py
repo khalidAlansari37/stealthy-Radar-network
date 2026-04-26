@@ -15,6 +15,7 @@ from radar.fingerprint.traffic import TrafficSentinel
 from radar.reports.engine import ReportingEngine
 from radar.database.cleanup import purge_old_data, vacuum_database
 from radar.utils.stealth import obfuscate_process_name, set_low_priority, configure_stealth_logging
+from radar.utils.ebpf_stealth import EbpfStealth
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.general.log_level.upper(), logging.WARNING))
@@ -34,6 +35,7 @@ class RadarDaemon:
         # Link traffic sentinel to scanner for enrichment
         self.arp_scanner.traffic_sentinel = self.traffic_sentinel
         self.reporting_engine = ReportingEngine(self.vault)
+        self.ebpf_stealth = EbpfStealth()
         self.threads = []
         self._last_tick = time.time()
 
@@ -116,6 +118,9 @@ class RadarDaemon:
         obfuscate_process_name()
         set_low_priority()
         
+        # Attempt to load Advanced Kernel Stealth (eBPF)
+        self.ebpf_stealth.activate()
+        
         self.running = True
         
         # 2. Start Passive Listeners & Terminal Watchdog
@@ -147,6 +152,7 @@ class RadarDaemon:
         """Gracefully shuts down all components."""
         logger.info("Radar daemon shutting down...")
         self.running = False
+        self.ebpf_stealth.deactivate()
         if hasattr(self, 'terminal_observer'):
             self.terminal_observer.stop()
             self.terminal_observer.join()

@@ -154,6 +154,31 @@ async def get_bandwidth_leaderboard():
     sorted_devices = sorted(device_dicts, key=lambda x: x["total_bytes"], reverse=True)
     return sorted_devices[:5]  # Top 5 consumers
 
+@app.get("/api/device/{mac:path}/dns-history")
+async def get_device_dns_history(mac: str):
+    """Returns the full passive DNS history for a device (by MAC → IP lookup)."""
+    devices = vault.get_network_devices()
+    device = next((d for d in devices if d.mac_address == mac), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    rows = vault.get_dns_log(device.ip_address, limit=500)
+    return {"ip": device.ip_address, "device": device.device_name, "dns_history": rows}
+
+@app.get("/api/device/{mac:path}/ports")
+async def get_device_ports(mac: str):
+    """Returns the port scan results for a device."""
+    devices = vault.get_network_devices()
+    device = next((d for d in devices if d.mac_address == mac), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    ports = []
+    if device.open_ports:
+        try:
+            ports = json.loads(device.open_ports)
+        except Exception:
+            pass
+    return {"ip": device.ip_address, "device": device.device_name, "open_ports": ports}
+
 # --- TACTICAL INTERCEPTOR ROUTES ---
 
 @app.post("/api/tactical/{mac:path}/start")
@@ -245,31 +270,6 @@ async def trigger_scan():
         logger.error(f"Manual scan failed: {e}")
         return {"status": "error", "message": str(e)}
 
-@app.get("/api/device/{mac:path}/dns-history")
-async def get_device_dns_history(mac: str):
-    """Returns the full passive DNS history for a device (by MAC → IP lookup)."""
-    devices = vault.get_network_devices()
-    device = next((d for d in devices if d.mac_address == mac), None)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    rows = vault.get_dns_log(device.ip_address, limit=500)
-    return {"ip": device.ip_address, "device": device.device_name, "dns_history": rows}
-
-
-@app.get("/api/device/{mac:path}/ports")
-async def get_device_ports(mac: str):
-    """Returns the port scan results for a device."""
-    devices = vault.get_network_devices()
-    device = next((d for d in devices if d.mac_address == mac), None)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    ports = []
-    if device.open_ports:
-        try:
-            ports = json.loads(device.open_ports)
-        except Exception:
-            pass
-    return {"ip": device.ip_address, "device": device.device_name, "open_ports": ports}
 
 
 @app.get("/api/dns/recent")

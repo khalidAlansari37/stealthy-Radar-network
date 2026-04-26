@@ -20,6 +20,12 @@ install: ## Install as a permanent background service (Systemd)
 	sudo systemctl start radar
 	@echo "✅ Radar is now installed and cloaked as 'kworker/sys'."
 
+install-ebpf: ## Install kernel headers and BCC tools for Advanced Process Hiding
+	@echo "📡 Installing eBPF requirements..."
+	sudo apt-get update
+	sudo apt-get install -y python3-bpfcc bpfcc-tools linux-headers-$$(uname -r)
+	@echo "✅ eBPF dependencies installed."
+
 live: ## Launch the web dashboard (Normal mode)
 	@PYTHONPATH=. $(PYTHON) -m uvicorn radar.web.app:app --host 0.0.0.0 --port 8000
 
