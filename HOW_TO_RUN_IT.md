@@ -90,7 +90,61 @@ Radar has a powerful feature called **Tactical Intercept**. This allows you to "
     ```
 3.  **What happens?** Radar will perform "ARP Spoofing" to trick the target device into sending its data to you. Radar will then analyze the traffic and pass it along to the router so the target device doesn't lose internet connection.
 
-*Note: Use this feature responsibly and only on networks you own!*
+*Note: You MUST leave this terminal running to perform the following advanced attacks.*
+
+---
+
+## 🎭 Advanced: LAN Manipulation (The 3-Step Attack)
+
+Radar allows you to manipulate exactly what other people on your network see on their screens. To pull this off, you use the **Intercept**, **Spoof**, and **Portal** commands together.
+
+### Step A: The Intercept
+First, you must intercept the target's traffic (as explained above).
+```bash
+make intercept IP=192.168.1.50
+```
+
+### Step B: The DNS Spoof
+In a **new terminal**, tell Radar to lie to the target device. When the target asks for a website, tell them to go to YOUR computer's IP address instead.
+```bash
+make spoof IP=192.168.1.50 RULES="facebook.com=192.168.1.100"
+```
+*(Replace `192.168.1.100` with your own computer's IP).*
+
+### Step C: The Captive Portal
+In a **third terminal**, start Radar's fake web server. This looks like a public Wi-Fi login page.
+```bash
+make portal
+```
+**The Trap:** If you spoof a connectivity-check domain (like `captive.apple.com`), the target's phone will automatically pop up this fake login page. Any passwords they enter will be printed in your terminal!
+
+---
+
+## 💀 Advanced: Wi-Fi Kicker (Deauth Attack)
+
+You can forcibly disconnect any device from your Wi-Fi network. **Warning:** This requires your Wi-Fi adapter to support "Monitor Mode".
+
+1. Find the **MAC Address** of the device you want to kick.
+2. Find the **BSSID** (MAC Address) of your Wi-Fi Router.
+3. Run the kick command:
+```bash
+make kick MAC=AA:BB:CC:DD:EE:FF TARGET=11:22:33:44:55:66
+```
+
+---
+
+## 📊 Utilities: Port Scanning & Excel Export
+
+Radar does a lot of work in the background, but you can trigger these manually:
+
+*   **Excel Export:** Turn all your network intelligence into a beautiful, formatted Excel spreadsheet.
+    ```bash
+    make export
+    ```
+*   **Manual Port Scan:** Actively scan a device to see what services (like HTTP, SSH, FTP) are open.
+    ```bash
+    make scan IP=192.168.1.50
+    ```
 
 ---
 
@@ -113,7 +167,12 @@ make install
 | **Setup** | `make setup` | Installs everything for the first time. |
 | **Start Engine** | `make brain` | Starts the "Brain" to gather data (Requires Root). |
 | **Start View** | `make live-root` | Starts the "Dashboard" to see data (Requires Root). |
-| **Intercept** | `make intercept IP=X` | Redirects traffic from another device (ARP Spoof). |
+| **Intercept** | `make intercept IP=X` | Step A: Redirects traffic from another device (ARP Spoof). |
+| **DNS Spoof** | `make spoof IP=X RULES="A=B"`| Step B: Redirects domains to fake IPs. |
+| **Captive Portal** | `make portal` | Step C: Triggers a fake Wi-Fi login page on the target. |
+| **Wi-Fi Kick** | `make kick MAC=X TARGET=Y` | Forcibly disconnects a device from Wi-Fi (Requires Monitor Mode). |
+| **Port Scan** | `make scan IP=X` | Manually run a port scan against a specific device. |
+| **Excel Export** | `make export` | Generates a clean Excel spreadsheet of all network devices. |
 | **Full Install** | `make install` | Runs everything silently in the background forever. |
 | **Check Logs** | `make logs` | See what the Brain is thinking right now. |
 | **Check Status** | `make status` | Is Radar running right now? |
