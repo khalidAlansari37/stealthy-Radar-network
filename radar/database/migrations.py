@@ -126,6 +126,20 @@ def create_tables(conn: sqlite3.Connection):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dns_src_ip ON dns_log(src_ip)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dns_timestamp ON dns_log(timestamp)")
 
+    # 9. Captured Credentials (Session Hijacking)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS credentials (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp  DATETIME DEFAULT (datetime('now')),
+        src_ip     TEXT NOT NULL,
+        target_host TEXT,
+        cred_type  TEXT, -- Cookie, Auth, etc.
+        cred_value TEXT NOT NULL,
+        raw_header TEXT
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cred_src_ip ON credentials(src_ip)")
+
     # 9. Schema Evolution (Add missing columns to existing DBs)
     _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN last_activity TEXT")
     _safe_alter(cursor, "ALTER TABLE network_devices ADD COLUMN traffic_summary TEXT")

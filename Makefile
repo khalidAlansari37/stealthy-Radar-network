@@ -44,6 +44,9 @@ spoof: ## Start DNS Spoofer after intercept (usage: make spoof IP=192.168.1.5 RU
 portal: ## Start captive portal web server (usage: make portal  or  make portal PORT=80)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.portal $(if $(PORT),--port $(PORT),)
 
+hijack: ## Harvest session cookies and tokens (usage: make hijack IP=192.168.1.5)
+	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.hijacker $(IP)
+
 kick: ## Kick a device off Wi-Fi — requires monitor mode (usage: make kick MAC=AA:BB:CC TARGET=XX:YY:ZZ IFACE=wlan0mon)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.deauth $(MAC) $(TARGET) $(if $(IFACE),$(IFACE),wlan0mon)
 
