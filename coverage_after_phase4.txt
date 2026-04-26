@@ -1,0 +1,170 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /home/qafilah_genomics/Desktop/Radar
+plugins: mock-3.15.1, cov-7.1.0
+collected 66 items
+
+tests/test_cleanup.py ..                                                 [  3%]
+tests/test_config.py ...                                                 [  7%]
+tests/test_helpers.py .....                                              [ 15%]
+tests/test_models.py ......                                              [ 24%]
+tests/test_monitors.py ...........                                       [ 40%]
+tests/test_network.py ..............                                     [ 62%]
+tests/test_reports.py FF......                                           [ 74%]
+tests/test_terminal_monitor.py ............                              [ 92%]
+tests/test_vault.py .....                                                [100%]/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550ebf880>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550d20b80>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550d209a0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550d20e50>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550d21030>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+
+=================================== FAILURES ===================================
+____________________________ test_aggregator_logic _____________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x7fe550eec7a0>
+mock_vault = <Mock id='140622880468880'>
+
+    def test_aggregator_logic(mocker, mock_vault):
+        aggregator = DataAggregator(vault=mock_vault)
+    
+        # Mock vault returns
+        now = datetime.now()
+        mock_vault.get_app_activity.return_value = [
+            AppActivityRecord(
+                app_name="Chrome",
+                duration_seconds=600,
+                timestamp=now,
+                window_title="Google",
+                process_name="chrome",
+                process_pid=1234
+            )
+        ]
+        mock_vault.get_terminal_commands.return_value = [
+            TerminalCommandRecord(
+                command="ls",
+                shell="bash",
+                timestamp=now,
+                working_dir="/home"
+            )
+        ]
+        mock_vault.get_network_devices.return_value = [
+            NetworkDeviceRecord(
+                mac_address="1",
+                ip_address="1.1.1.1",
+                first_seen=now,
+                last_seen=now
+            )
+        ]
+        mock_vault.get_system_metrics.return_value = [
+            SystemMetricRecord(
+                cpu_percent=10.0,
+                ram_percent=50.0,
+                disk_percent=20.0,
+                battery_percent=100.0,
+                battery_charging=True,
+                net_bytes_sent=100,
+                net_bytes_recv=200,
+                timestamp=now
+            )
+        ]
+    
+        summary = aggregator.get_daily_summary(now.date().isoformat())
+    
+>       assert summary["apps"]["total_count"] == 1
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'total_count'
+
+tests/test_reports.py:72: KeyError
+______________________________ test_pdf_generator ______________________________
+
+summary_data = {'apps': {'top_5': [{'minutes': 10.5, 'name': 'Chrome'}], 'total_count': 10}, 'date': '2026-04-07', 'network': {'active_count': 5, 'new_count': 1, 'new_names': ['Ahmed-iPhone']}, 'system': {'avg_cpu': 15.2, 'avg_ram': 45.0}, ...}
+tmp_path = PosixPath('/tmp/pytest-of-qafilah_genomics/pytest-4/test_pdf_generator0')
+
+    def test_pdf_generator(summary_data, tmp_path):
+        generator = PdfReportGenerator(summary_data)
+        output_path = str(tmp_path / "report.pdf")
+    
+>       path = generator.generate(output_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reports.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <radar.reports.generator.PdfReportGenerator object at 0x7fe550d64d70>
+output_path = '/tmp/pytest-of-qafilah_genomics/pytest-4/test_pdf_generator0/report.pdf'
+
+    def generate(self, output_path: str = None) -> str:
+        """Orchestrates the PDF creation."""
+        if not output_path:
+            reports_dir = get_radar_data_dir() / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            output_path = str(reports_dir / f"radar_intel_{self.summary['date']}.pdf")
+    
+        logger.info(f"Generating premium intelligence report: {output_path}")
+    
+        self.pdf.add_page()
+        self.pdf.set_text_color(*self.text_color)
+    
+        # --- SECTION: STATUS CARDS ---
+        self.pdf.set_font("helvetica", "B", 11)
+        self.pdf.set_xy(10, 45)
+    
+        # Total Activity
+>       total_mins = round(self.summary['apps']['total_seconds'] / 60, 1)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'total_seconds'
+
+radar/reports/generator.py:115: KeyError
+=============================== warnings summary ===============================
+tests/test_helpers.py::test_detect_os
+  /usr/lib/python3.14/unittest/mock.py:2252: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe550ebf5b0>
+    def __init__(self, name, parent):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.3-final-0 ________________
+
+Name                                 Stmts   Miss  Cover   Missing
+------------------------------------------------------------------
+radar/__init__.py                        0      0   100%
+radar/config.py                         54      2    96%   75-77
+radar/database/__init__.py               0      0   100%
+radar/database/cleanup.py               16      1    94%   8
+radar/database/migrations.py            17      0   100%
+radar/database/models.py                59      0   100%
+radar/database/vault.py                 82      6    93%   137-141, 149-152
+radar/fingerprint/__init__.py            0      0   100%
+radar/fingerprint/exporter.py           41      3    93%   54-56
+radar/fingerprint/profiler.py           53      4    92%   97-100
+radar/fingerprint/scanner.py            47      7    85%   69-76
+radar/monitors/__init__.py               0      0   100%
+radar/monitors/app_monitor.py           52      6    88%   57, 79-83
+radar/monitors/idle_detector.py         24      3    88%   35-37
+radar/monitors/system_monitor.py        51      7    86%   35, 79-84
+radar/monitors/terminal_monitor.py      88     14    84%   55-57, 76, 80, 120-128
+radar/reporting/__init__.py              0      0   100%
+radar/reports/aggregator.py             48      6    88%   19, 100-104
+radar/reports/engine.py                 80     18    78%   71-73, 95-109, 122-126
+radar/reports/generator.py             171    128    25%   37-40, 54-71, 75-96, 101-103, 116-219, 222-248
+radar/reports/mailer.py                 55     11    80%   61, 68-77, 81-83
+radar/utils/__init__.py                  0      0   100%
+radar/utils/helpers.py                  62      8    87%   18, 35, 40, 54-55, 62-63, 83
+------------------------------------------------------------------
+TOTAL                                 1000    224    78%
+=========================== short test summary info ============================
+FAILED tests/test_reports.py::test_aggregator_logic - KeyError: 'total_count'
+FAILED tests/test_reports.py::test_pdf_generator - KeyError: 'total_seconds'
+=================== 2 failed, 64 passed, 1 warning in 4.13s ====================

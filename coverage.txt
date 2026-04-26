@@ -1,0 +1,96 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /home/qafilah_genomics/Desktop/Radar
+plugins: mock-3.15.1, cov-7.1.0
+collected 66 items
+
+tests/test_cleanup.py ..                                                 [  3%]
+tests/test_config.py ...                                                 [  7%]
+tests/test_helpers.py .....                                              [ 15%]
+tests/test_models.py ......                                              [ 24%]
+tests/test_monitors.py ...........                                       [ 40%]
+tests/test_network.py ..............                                     [ 62%]
+tests/test_reports.py ....F...                                           [ 74%]
+tests/test_terminal_monitor.py ............                              [ 92%]
+tests/test_vault.py .....                                                [100%]/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c68a3d30>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c68a3e20>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c66a3f10>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c66a3e20>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c65fc400>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f03c65fc5e0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+
+=================================== FAILURES ===================================
+_________________________ test_reporting_engine_pulse __________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x7f03c68d5cc0>
+mock_vault = <Mock id='139654190869072'>
+summary_data = {'apps': {'top_5': [{'minutes': 10.5, 'name': 'Chrome'}], 'total_count': 10}, 'date': '2026-04-07', 'network': {'active_count': 5, 'new_count': 1, 'new_names': ['Ahmed-iPhone']}, 'system': {'avg_cpu': 15.2, 'avg_ram': 45.0}, ...}
+
+    def test_reporting_engine_pulse(mocker, mock_vault, summary_data):
+        engine = ReportingEngine(vault=mock_vault)
+    
+        # Mock should_report_now to True
+        mocker.patch.object(engine, '_should_report_now', return_value=True)
+        # Mock aggregate, generate, send
+        mocker.patch.object(engine.aggregator, 'get_daily_summary', return_value=summary_data)
+        mocker.patch("radar.reports.generator.PdfReportGenerator.generate", return_value="/tmp/test.pdf")
+        mocker.patch.object(engine.mailer, 'send_report', return_value=True)
+    
+        engine.pulse()
+    
+        assert mock_vault.insert_report_log.called
+>       assert engine.last_report_date == summary_data["date"]
+E       AssertionError: assert '2026-04-14' == '2026-04-07'
+E         
+E         - 2026-04-07
+E         ?         ^^
+E         + 2026-04-14
+E         ?         ^^
+
+tests/test_reports.py:120: AssertionError
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.3-final-0 ________________
+
+Name                                 Stmts   Miss  Cover   Missing
+------------------------------------------------------------------
+radar/__init__.py                        0      0   100%
+radar/config.py                         54      2    96%   75-77
+radar/database/__init__.py               0      0   100%
+radar/database/cleanup.py               16      1    94%   8
+radar/database/migrations.py            17      0   100%
+radar/database/models.py                59      0   100%
+radar/database/vault.py                 82      6    93%   137-141, 149-152
+radar/fingerprint/__init__.py            0      0   100%
+radar/fingerprint/exporter.py           41      3    93%   54-56
+radar/fingerprint/profiler.py           53      4    92%   97-100
+radar/fingerprint/scanner.py            47      7    85%   69-76
+radar/monitors/__init__.py               0      0   100%
+radar/monitors/app_monitor.py           52      6    88%   57, 79-83
+radar/monitors/idle_detector.py         24      3    88%   35-37
+radar/monitors/system_monitor.py        51      7    86%   35, 79-84
+radar/monitors/terminal_monitor.py      88     14    84%   55-57, 76, 80, 120-128
+radar/reporting/__init__.py              0      0   100%
+radar/reports/aggregator.py             33      6    82%   19, 67-71
+radar/reports/engine.py                 56      5    91%   85-89
+radar/reports/generator.py              69      9    87%   35-38, 90-94
+radar/reports/mailer.py                 46      6    87%   56, 63-65, 69-71
+radar/utils/__init__.py                  0      0   100%
+radar/utils/helpers.py                  62      8    87%   18, 35, 40, 54-55, 62-63, 83
+------------------------------------------------------------------
+TOTAL                                  850     87    90%
+=========================== short test summary info ============================
+FAILED tests/test_reports.py::test_reporting_engine_pulse - AssertionError: a...
+========================= 1 failed, 65 passed in 1.06s =========================

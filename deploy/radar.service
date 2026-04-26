@@ -1,0 +1,41 @@
+[Unit]
+Description=Radar Stealth Intelligence Daemon
+Documentation=file:///home/qafilah_genomics/Desktop/Radar/README.md
+After=network-online.target graphical-session.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qafilah_genomics
+WorkingDirectory=/home/qafilah_genomics/Desktop/Radar
+
+# ── Python path ────────────────────────────────────────────────────────────────
+Environment=PYTHONPATH=/home/qafilah_genomics/Desktop/Radar
+
+# ── X11 Bridge: fixes "System / Locked" screen-blindness bug ─────────────────
+# The daemon runs headless but xdotool + xprintidle need these to reach the
+# active desktop session. Adjust the XAUTHORITY path if using GDM/Wayland.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/qafilah_genomics/.Xauthority
+
+# ── Raw socket capability (Scapy ARP + DPI sniffing) ─────────────────────────
+# Grants CAP_NET_RAW and CAP_NET_ADMIN without requiring full root.
+# This allows ARP scanning and packet capture as a regular user.
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+
+# ── Process settings ───────────────────────────────────────────────────────────
+ExecStart=/home/qafilah_genomics/Desktop/Radar/.venv/bin/python3 -m radar.main
+Restart=always
+RestartSec=30
+
+# Run at low priority so we never starve the user's active work
+Nice=19
+IOSchedulingClass=idle
+
+# ── Hardening (keep the daemon contained) ─────────────────────────────────────
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target graphical.target

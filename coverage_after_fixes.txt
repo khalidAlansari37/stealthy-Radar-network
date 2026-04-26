@@ -1,0 +1,135 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /home/qafilah_genomics/Desktop/Radar
+plugins: mock-3.15.1, cov-7.1.0
+collected 68 items
+
+tests/test_cleanup.py ..                                                 [  2%]
+tests/test_config.py ...                                                 [  7%]
+tests/test_helpers.py .....                                              [ 14%]
+tests/test_models.py ......                                              [ 23%]
+tests/test_monitors.py ...........                                       [ 39%]
+tests/test_network.py ..............                                     [ 60%]
+tests/test_reports.py .........F                                         [ 75%]
+tests/test_terminal_monitor.py ............                              [ 92%]
+tests/test_vault.py .....                                                [100%]/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff9043db970>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff903d9a020>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff903d99e40>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff903d9a2f0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/qafilah_genomics/Desktop/Radar/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:33: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff903d9a4d0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+
+=================================== FAILURES ===================================
+_________________________ test_engine_pending_recovery _________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x7ff90402ce20>
+mock_vault = <Mock id='140707488105200'>
+summary_data = {'apps': {'hourly_usage': [0, 0, 0, 0, 0, 0, ...], 'top_10': [{'minutes': 10.5, 'name': 'Chrome'}], 'total_seconds': 6...': 40}, {'battery': 90, 'cpu': 10, 'hour': 4, 'ram': 40}, {'battery': 90, 'cpu': 10, 'hour': 5, 'ram': 40}, ...]}, ...}
+tmp_path = PosixPath('/tmp/pytest-of-qafilah_genomics/pytest-5/test_engine_pending_recovery0')
+
+    def test_engine_pending_recovery(mocker, mock_vault, summary_data, tmp_path):
+        # Setup data dir and pending dir
+        radar_dir = tmp_path / ".radar"
+        pending_dir = radar_dir / "pending_reports"
+        pending_dir.mkdir(parents=True)
+        mocker.patch("radar.utils.helpers.get_radar_data_dir", return_value=radar_dir)
+    
+        engine = ReportingEngine(vault=mock_vault)
+    
+        # 1. Test saving to pending on failure
+        mocker.patch.object(engine.aggregator, "get_daily_summary", return_value=summary_data)
+        mocker.patch.object(engine.mailer, "send_report", return_value=False)
+    
+        pdf_path = tmp_path / f"radar_intel_{summary_data['date']}.pdf"
+        pdf_path.write_bytes(b"dummy pdf")
+        mocker.patch("radar.reports.generator.PdfReportGenerator.generate", return_value=str(pdf_path))
+    
+        engine.generate_and_send(summary_data["date"])
+    
+        expected_pending = pending_dir / pdf_path.name
+>       assert expected_pending.exists()
+E       AssertionError: assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('/tmp/pytest-of-qafilah_genomics/pytest-5/test_engine_pending_recovery0/.radar/pending_reports/radar_intel_2026-04-07.pdf').exists
+
+tests/test_reports.py:222: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  radar.reports.engine:engine.py:72 Report delivery failed. Moving to pending: /home/qafilah_genomics/.radar/pending_reports/radar_intel_2026-04-07.pdf
+=============================== warnings summary ===============================
+tests/test_monitors.py::test_idle_detector_xprintidle_fail
+  <string>:2: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ff9043db6a0>
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:119: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(50, 5, "TOTAL ACTIVITY", ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:128: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(50, 5, "NEW HARDWARE", ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:137: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(50, 5, "AVG CPU LOAD", ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:160: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(60, 7, "TOP APPLICATIONS", ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:166: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(30, 6, f"{app['minutes']}m", align="R", ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:194: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(75, 8, "Manufacturer", border=1, fill=True, ln=1)
+
+tests/test_reports.py::test_pdf_generator
+  /home/qafilah_genomics/Desktop/Radar/radar/reports/generator.py:201: DeprecationWarning: The parameter "ln" is deprecated since v2.5.2. Instead of ln=1 use new_x=XPos.LMARGIN, new_y=YPos.NEXT.
+    self.pdf.cell(75, 7, d['manufacturer'][:35], border=1, ln=1)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.3-final-0 ________________
+
+Name                                 Stmts   Miss  Cover   Missing
+------------------------------------------------------------------
+radar/__init__.py                        0      0   100%
+radar/config.py                         54      2    96%   75-77
+radar/database/__init__.py               0      0   100%
+radar/database/cleanup.py               16      1    94%   8
+radar/database/migrations.py            17      0   100%
+radar/database/models.py                59      0   100%
+radar/database/vault.py                 82      6    93%   137-141, 149-152
+radar/fingerprint/__init__.py            0      0   100%
+radar/fingerprint/exporter.py           41      3    93%   54-56
+radar/fingerprint/profiler.py           53      4    92%   97-100
+radar/fingerprint/scanner.py            47      7    85%   69-76
+radar/monitors/__init__.py               0      0   100%
+radar/monitors/app_monitor.py           52      6    88%   57, 79-83
+radar/monitors/idle_detector.py         24      3    88%   35-37
+radar/monitors/system_monitor.py        51      7    86%   35, 79-84
+radar/monitors/terminal_monitor.py      88     14    84%   55-57, 76, 80, 120-128
+radar/reporting/__init__.py              0      0   100%
+radar/reports/aggregator.py             48      6    88%   19, 100-104
+radar/reports/engine.py                 80     15    81%   95-109, 122-126
+radar/reports/generator.py             171      8    95%   56, 101-103, 222-248
+radar/reports/mailer.py                 55      5    91%   61, 75-77, 81-83
+radar/utils/__init__.py                  0      0   100%
+radar/utils/helpers.py                  62      8    87%   18, 35, 40, 54-55, 62-63, 83
+------------------------------------------------------------------
+TOTAL                                 1000     95    90%
+=========================== short test summary info ============================
+FAILED tests/test_reports.py::test_engine_pending_recovery - AssertionError: ...
+=================== 1 failed, 67 passed, 8 warnings in 4.07s ===================

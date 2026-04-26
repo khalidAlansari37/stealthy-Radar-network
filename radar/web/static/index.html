@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Intelligence Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                <span class="radar-icon">📡</span>
+                <h1>RADAR <span class="dim">INTELLIGENCE</span></h1>
+            </div>
+            <nav class="main-nav">
+                <a href="#/" class="nav-item active" id="nav-home">LIVE</a>
+                <a href="#/history" class="nav-item" id="nav-history">ARCHIVE</a>
+            </nav>
+            <div class="header-info">
+                <button id="btn-scan" class="btn-action">SCAN NOW</button>
+                <div id="clock" class="mono">--:--:--</div>
+                <div id="refresh-indicator" class="spinner"></div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="view-container">
+            <!-- Views will be injected here by JS -->
+        </main>
+
+        <!-- Footer -->
+        <footer class="main-footer">
+            <p>Daemon running stealth as <span class="mono">kworker/sys</span> | Local Intelligence Mode</p>
+        </footer>
+    </div>
+
+    <!-- Templates -->
+    <template id="tpl-history">
+        <section class="history-view">
+            <div class="section-header">
+                <h2>DEVICE ARCHIVE (TOTAL HISTORY)</h2>
+                <div class="controls">
+                    <input type="text" id="history-search" placeholder="Search archive...">
+                </div>
+            </div>
+            <div class="panel glass no-padding">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Device</th>
+                            <th>Identity</th>
+                            <th>First Seen</th>
+                            <th>Last Seen</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <!-- History rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </template>
+    <template id="tpl-home">
+        <section class="home-view">
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Devices</h3>
+                    <p id="stat-total-devices" class="large">--</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Today</h3>
+                    <p id="stat-active-today" class="large">--</p>
+                </div>
+                <div class="stat-card">
+                    <h3>CPU Usage</h3>
+                    <div class="progress-bar-container">
+                        <div id="cpu-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="stat-cpu">--%</p>
+                </div>
+                <div class="stat-card">
+                    <h3>RAM Usage</h3>
+                    <div class="progress-bar-container">
+                        <div id="ram-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="stat-ram">--%</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Battery</h3>
+                    <p id="stat-battery">--% <span id="stat-charging"></span></p>
+                </div>
+            </div>
+
+            <div class="content-split">
+                <!-- App Focus -->
+                <div class="panel glass">
+                    <h2>[APP FOCUS MONITOR]</h2>
+                    <div class="app-status">
+                        <div class="current-app">
+                            <span class="label">Current App:</span>
+                            <span id="current-app-name" class="highlight">--</span>
+                            <span id="idle-badge" class="badge">--</span>
+                        </div>
+                        <div class="window-title">
+                            <span class="label">Window Title:</span>
+                            <span id="window-title-text" class="dim small">--</span>
+                        </div>
+                    </div>
+                    <div class="top-apps-list">
+                        <h3>Today's Top Apps</h3>
+                        <ul id="top-apps-ul">
+                            <!-- Injected -->
+                        </ul>
+                    </div>
+                    <div class="top-apps-list" style="margin-top: 15px;">
+                        <h3>Top Internet Consumers</h3>
+                        <ul id="top-bandwidth-ul">
+                            <li class="dim small">Loading data...</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Network Info -->
+                <div class="panel glass">
+                    <h2>[NETWORK STATUS]</h2>
+                    <div class="wifi-info">
+                        <p>SSID: <span id="wifi-ssid" class="highlight">--</span></p>
+                        <p>Signal: <span id="wifi-signal" class="mono">-- dBm</span></p>
+                    </div>
+                    <div class="network-meta">
+                        <p>Gateway: <span id="gateway-ip" class="mono">192.168.10.1</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device List -->
+            <div class="device-section">
+                <div class="section-header">
+                    <h2>NETWORK RECONNAISSANCE</h2>
+                    <div class="controls">
+                        <input type="text" id="device-search" placeholder="Search devices...">
+                    </div>
+                </div>
+                <div id="device-grid" class="device-grid">
+                    <!-- Device cards injected here -->
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template id="tpl-detail">
+        <section class="detail-view">
+            <button id="btn-back" class="btn-text">← Back to Dashboard</button>
+            <div class="detail-container glass">
+                <header class="detail-header">
+                    <div class="device-icon-lg" id="detail-icon">📱</div>
+                    <div class="device-title">
+                        <h1 id="detail-name">Loading...</h1>
+                        <p id="detail-mac" class="mono dim">--:--:--:--:--:--</p>
+                        <div style="margin-top:10px">
+                            <a id="btn-deep-intel" class="btn-action" style="text-decoration:none">DEEP INTEL</a>
+                        </div>
+                    </div>
+                    <div class="status-badge" id="det-status">Online</div>
+                </header>
+
+                <div class="detail-grid">
+                    <div class="detail-info">
+                        <h3>Identity</h3>
+                        <p><span class="label">IP Address:</span> <span id="det-ip" class="mono">--</span></p>
+                        <p><span class="label">MAC Address:</span> <span id="det-mac" class="mono">--</span></p>
+                        <p><span class="label">Device Type:</span> <span id="det-type">--</span></p>
+                        <p><span class="label">Confidence:</span> <span id="det-confidence">--%</span></p>
+                    </div>
+                    <div class="detail-history">
+                        <h3>Activity Timeline</h3>
+                        <p><span class="label">First Seen:</span> <span id="det-first-seen">--</span></p>
+                        <p><span class="label">Last Seen:</span> <span id="det-last-seen">--</span></p>
+                    </div>
+                </div>
+
+                <div class="intelligence-section">
+                    <h3>Intelligence & DPI</h3>
+                    <div class="intel-card">
+                        <p><span class="label">Last Activity:</span> <span id="det-activity" class="highlight">--</span></p>
+                        <p><span class="label">Traffic Summary:</span> <span id="det-traffic" class="small">--</span></p>
+                    </div>
+                    <div class="discovery-details">
+                        <div class="intel-item">
+                            <span class="label">mDNS Hostname:</span>
+                            <span id="det-mdns" class="mono">--</span>
+                        </div>
+                        <div class="intel-item">
+                            <span class="label">SSDP Info:</span>
+                            <span id="det-ssdp" class="dim small">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="session-section">
+                    <h3>Recent Sessions</h3>
+                    <div class="session-table-container">
+                        <table class="session-table">
+                            <thead>
+                                <tr>
+                                    <th>Start</th>
+                                    <th>End</th>
+                                    <th>Traffic</th>
+                                </tr>
+                            </thead>
+                            <tbody id="det-sessions-body">
+                                <!-- Sessions injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flow-section" style="margin-top: 30px;">
+                    <h3>Live Traffic Flows</h3>
+                    <div class="session-table-container">
+                        <table class="session-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Destination</th>
+                                    <th>Website / Host</th>
+                                    <th>Protocol</th>
+                                </tr>
+                            </thead>
+                            <tbody id="det-flows-body">
+                                <!-- Flows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template id="tpl-intelligence">
+        <section class="intel-detail-view">
+            <button id="btn-back" class="btn-text">← Back</button>
+            <div class="intel-header glass" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2>DEEP TRAFFIC INTELLIGENCE</h2>
+                    <div id="intel-device-name" class="highlight">Loading Device...</div>
+                </div>
+                <div class="tactical-controls" style="text-align: right;">
+                    <button id="btn-tactical-start" class="btn-action" style="background: var(--color-accent); display: none;">INITIATE INTERCEPTION</button>
+                    <button id="btn-tactical-stop" class="btn-action" style="background: #e74c3c; display: none;">STOP INTERCEPTION</button>
+                    <div id="tactical-status" class="dim small" style="margin-top: 5px;">Checking tactical status...</div>
+                </div>
+            </div>
+
+            <div class="intel-grid">
+                <div class="panel glass">
+                    <h3>Bandwidth Consumption</h3>
+                    <div class="bandwidth-meter">
+                        <div id="bandwidth-fill" class="fill"></div>
+                    </div>
+                    <p id="total-usage" class="large mono">0.00 MB</p>
+                    <p class="dim small">Data intercepted in this session</p>
+                </div>
+
+                <div class="panel glass">
+                    <h3>Service Breakdown</h3>
+                    <ul id="top-services-list" class="top-apps-list">
+                        <!-- Top domains injected here -->
+                    </ul>
+                </div>
+            </div>
+
+            <div class="panel glass">
+                <h3>Live Flow Analysis</h3>
+                <div class="session-table-container">
+                    <table class="session-table">
+                        <tbody id="intel-flow-body">
+                            <!-- Live flows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
