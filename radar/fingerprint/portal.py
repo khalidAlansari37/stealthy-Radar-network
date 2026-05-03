@@ -98,17 +98,29 @@ SUBMITTED_HTML = """<!DOCTYPE html>
 </body></html>"""
 
 
-def build_app(title: str = "Network Login Required"):
+def build_app(title: str = "Network Login Required", redirect_url: str = None):
     """Creates and returns the FastAPI captive portal application."""
     from fastapi import FastAPI, Request, Form
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, RedirectResponse
 
     app = FastAPI(title="Radar Captive Portal")
 
     # Serve portal on ALL paths (catch-all for iOS/Android redirects)
-    @app.get("/{path:path}", response_class=HTMLResponse)
-    async def serve_portal(path: str):
-        return PORTAL_HTML.format(title=title)
+    @app.api_route("/{path:path}", methods=["GET", "POST", "HEAD", "OPTIONS"])
+    async def serve_portal(path: str, request: Request):
+        if redirect_url:
+            import re
+            # Strip ANSI escape sequences (like terminal hyperlinks) that users might paste
+            clean_url = re.sub(r'\x1b\[[0-9;]*m', '', redirect_url)
+            clean_url = re.sub(r'\x1b\]8;;.*?\x1b\\\\', '', clean_url)
+            clean_url = re.sub(r'\x1b\]8;;\x1b\\\\', '', clean_url)
+            # If it's a raw hyperlink format, extract just the URL part
+            match = re.search(r'(https?://[^\s]+)', clean_url)
+            final_url = match.group(1) if match else clean_url
+            
+            # Proper HTTP 302 Redirect is required to trigger OS captive portal pop-ups
+            return RedirectResponse(url=final_url, status_code=302)
+        return HTMLResponse(content=PORTAL_HTML.format(title=title))
 
     @app.post("/submit", response_class=HTMLResponse)
     async def capture_credentials(
@@ -139,11 +151,11 @@ def build_app(title: str = "Network Login Required"):
     return app
 
 
-def start_portal(port: int = 8080, title: str = "Network Login Required"):
+def start_portal(port: int = 8080, title: str = "Network Login Required", redirect_url: str = None):
     """Starts the captive portal server."""
     import uvicorn
 
-    app = build_app(title=title)
+    app = build_app(title=title, redirect_url=redirect_url)
 
     print(f"\n🌐 Captive Portal running on port {port}")
     print(f"   Title: {title}")
@@ -160,6 +172,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Radar Captive Portal")
     parser.add_argument("--port",  type=int, default=8080, help="Port to listen on (default: 8080)")
     parser.add_argument("--title", type=str, default="Network Login Required", help="Portal page title")
+    parser.add_argument("--redirect", type=str, default=None, help="URL to redirect users to automatically")
     args = parser.parse_args()
 
-    start_portal(port=args.port, title=args.title)
+    start_portal(port=args.port, title=args.title, redirect_url=args.redirect)

