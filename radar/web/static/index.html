@@ -157,100 +157,119 @@
         </section>
     </template>
 
-    <template id="tpl-detail">
-        <section class="detail-view">
+    <!-- Device Forensics Page Template -->
+    <template id="tpl-forensics">
+        <section class="forensics-view">
             <button id="btn-back" class="btn-text">← Back to Dashboard</button>
-            <div class="detail-container glass">
-                <header class="detail-header">
-                    <div class="device-icon-lg" id="detail-icon">📱</div>
-                    <div class="device-title">
-                        <h1 id="detail-name">Loading...</h1>
-                        <p id="detail-mac" class="mono dim">--:--:--:--:--:--</p>
-                        <div style="margin-top:10px">
-                            <a id="btn-deep-intel" class="btn-action" style="text-decoration:none">DEEP INTEL</a>
+
+            <!-- Header Card -->
+            <div class="forensics-hero glass">
+                <div class="forensics-hero-left">
+                    <div class="device-icon-lg" id="forensics-icon">📱</div>
+                    <div>
+                        <h1 id="forensics-name" class="forensics-title">Loading...</h1>
+                        <p id="forensics-mac" class="mono dim small">--:--:--:--:--:--</p>
+                        <p id="forensics-manufacturer" class="dim small" style="margin-top:4px"></p>
+                    </div>
+                </div>
+                <div class="forensics-hero-right">
+                    <div class="forensics-status-badge" id="forensics-status">● Online</div>
+                    <div class="forensics-os-badge" id="forensics-os-badge">Scanning OS...</div>
+                    <div style="margin-top:12px">
+                        <button id="btn-export-logs" class="btn-action" style="background:rgba(0,255,136,0.1);border-color:var(--accent-green);color:var(--accent-green)">EXPORT LOGS</button>
+                    </div>
+                    <p class="dim small" style="text-align:right;margin-top:8px">Confidence: <span id="forensics-confidence" class="highlight">--%</span></p>
+                </div>
+            </div>
+
+            <!-- Identity + OS Fingerprint Row -->
+            <div class="forensics-grid-2">
+                <div class="panel glass">
+                    <h3>🌐 Network Identity</h3>
+                    <div class="info-table">
+                        <div class="info-row"><span class="label">IP Address</span><span id="forensics-ip" class="mono highlight">--</span></div>
+                        <div class="info-row"><span class="label">MAC Address</span><span id="forensics-mac2" class="mono">--</span></div>
+                        <div class="info-row"><span class="label">Device Type</span><span id="forensics-type">--</span></div>
+                        <div class="info-row"><span class="label">mDNS Name</span><span id="forensics-mdns" class="mono">--</span></div>
+                        <div class="info-row"><span class="label">SSDP / Service</span><span id="forensics-ssdp" class="dim small">--</span></div>
+                        <div class="info-row"><span class="label">First Seen</span><span id="forensics-first-seen" class="dim small">--</span></div>
+                        <div class="info-row"><span class="label">Last Seen</span><span id="forensics-last-seen" class="dim small">--</span></div>
+                    </div>
+                </div>
+                <div class="panel glass">
+                    <h3>🔬 OS Fingerprint Analysis</h3>
+                    <div class="os-fingerprint-display">
+                        <div class="os-icon-large" id="forensics-os-icon">❓</div>
+                        <div class="os-details">
+                            <p class="os-name" id="forensics-os-name">Scanning...</p>
+                            <p class="dim small" id="forensics-os-method">Method: --</p>
                         </div>
                     </div>
-                    <div class="status-badge" id="det-status">Online</div>
-                </header>
-
-                <div class="detail-grid">
-                    <div class="detail-info">
-                        <h3>Identity</h3>
-                        <p><span class="label">IP Address:</span> <span id="det-ip" class="mono">--</span></p>
-                        <p><span class="label">MAC Address:</span> <span id="det-mac" class="mono">--</span></p>
-                        <p><span class="label">Device Type:</span> <span id="det-type">--</span></p>
-                        <p><span class="label">Fingerprint:</span> <span id="det-os" class="highlight">--</span></p>
-                        <p><span class="label">Confidence:</span> <span id="det-confidence">--%</span></p>
+                    <div class="os-signals" id="forensics-os-signals">
+                        <!-- Signal badges injected here -->
                     </div>
-                    <div class="detail-history">
-                        <h3>Activity Timeline</h3>
-                        <p><span class="label">First Seen:</span> <span id="det-first-seen">--</span></p>
-                        <p><span class="label">Last Seen:</span> <span id="det-last-seen">--</span></p>
-                    </div>
-                </div>
-
-                <div class="intelligence-section">
-                    <h3>Intelligence & DPI</h3>
-                    <div class="intel-card">
-                        <p><span class="label">Last Activity:</span> <span id="det-activity" class="highlight">--</span></p>
-                        <p><span class="label">Traffic Summary:</span> <span id="det-traffic" class="small">--</span></p>
-                    </div>
-                    <div class="discovery-details">
-                        <div class="intel-item">
-                            <span class="label">mDNS Hostname:</span>
-                            <span id="det-mdns" class="mono">--</span>
-                        </div>
-                        <div class="intel-item">
-                            <span class="label">SSDP Info:</span>
-                            <span id="det-ssdp" class="dim small">--</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="ports-section" style="margin-top: 30px;">
-                    <h3>Discovered Services (Open Ports)</h3>
-                    <div id="det-ports-container" class="ports-container">
-                        <span class="dim small">Scanning...</span>
-                    </div>
-                </div>
-
-                <div class="session-section">
-                    <h3>Recent Sessions</h3>
-                    <div class="session-table-container">
-                        <table class="session-table">
-                            <thead>
-                                <tr>
-                                    <th>Start</th>
-                                    <th>End</th>
-                                    <th>Traffic</th>
-                                </tr>
-                            </thead>
-                            <tbody id="det-sessions-body">
-                                <!-- Sessions injected here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="flow-section" style="margin-top: 30px;">
-                    <h3>Live Traffic Flows</h3>
-                    <div class="session-table-container">
-                        <table class="session-table">
-                            <thead>
-                                <tr>
-                                    <th>Timestamp</th>
-                                    <th>Destination</th>
-                                    <th>Website / Host</th>
-                                    <th>Protocol</th>
-                                </tr>
-                            </thead>
-                            <tbody id="det-flows-body">
-                                <!-- Flows injected here -->
-                            </tbody>
-                        </table>
+                    <div style="margin-top:20px">
+                        <p class="dim small">Current Activity</p>
+                        <p id="forensics-activity" class="highlight" style="margin-top:6px;font-size:1rem">--</p>
+                        <p class="dim small" style="margin-top:8px">Traffic Summary</p>
+                        <p id="forensics-traffic" class="dim small" style="margin-top:4px">--</p>
                     </div>
                 </div>
             </div>
+
+            <!-- Protocol Breakdown + Bandwidth Row -->
+            <div class="forensics-grid-2" style="margin-top:20px">
+                <div class="panel glass">
+                    <h3>📊 Protocol Breakdown</h3>
+                    <div id="forensics-proto-chart" class="proto-chart">
+                        <span class="dim small">Collecting traffic data...</span>
+                    </div>
+                </div>
+                <div class="panel glass">
+                    <h3>💾 Open Ports &amp; Services</h3>
+                    <div id="forensics-ports" class="ports-container">
+                        <span class="dim small">Scanning...</span>
+                    </div>
+                    <div style="margin-top:24px">
+                        <h3>⚡ Tactical Controls</h3>
+                        <div class="tactical-controls-row">
+                            <button id="btn-tactical-start" class="btn-action" style="display:none">INITIATE INTERCEPTION</button>
+                            <button id="btn-tactical-stop" class="btn-action" style="background:rgba(255,68,102,0.1);border-color:#ff4466;color:#ff4466;display:none">STOP INTERCEPTION</button>
+                            <p id="tactical-status" class="dim small" style="margin-top:8px">Checking...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS History -->
+            <div class="panel glass" style="margin-top:20px">
+                <div class="section-header" style="margin-bottom:16px">
+                    <h3>🔍 DNS Query History</h3>
+                    <input type="text" id="dns-search" placeholder="Filter domains..." style="background:rgba(255,255,255,0.05);border:1px solid var(--border-glass);color:white;padding:8px 16px;border-radius:20px;outline:none;width:250px;font-size:0.85rem">
+                </div>
+                <div class="session-table-container">
+                    <table class="session-table" style="font-size:0.82rem">
+                        <thead><tr><th>#</th><th>Domain / Host</th><th>Method</th><th>Timestamp</th></tr></thead>
+                        <tbody id="forensics-dns-body">
+                            <tr><td colspan="4" class="dim small" style="text-align:center;padding:20px">Loading DNS history...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Full DPI Flow Log -->
+            <div class="panel glass" style="margin-top:20px">
+                <h3>📡 Live Traffic Flow Analysis</h3>
+                <div class="session-table-container">
+                    <table class="session-table" style="font-size:0.82rem">
+                        <thead><tr><th>Time</th><th>Destination IP</th><th>Resolved Host / Service</th><th>Port</th><th>Protocol</th><th>Size</th></tr></thead>
+                        <tbody id="forensics-flows-body">
+                            <tr><td colspan="6" class="dim small" style="text-align:center;padding:20px">No flows captured yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </section>
     </template>
 
@@ -315,6 +334,7 @@
         </section>
     </template>
 
+    <div id="toast-container"></div>
     <script src="/static/js/main.js"></script>
 </body>
 </html>

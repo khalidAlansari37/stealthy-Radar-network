@@ -183,6 +183,7 @@ async def get_device_ports(mac: str):
 
 @app.post("/api/tactical/{mac:path}/start")
 async def start_interception(mac: str):
+    mac = mac.upper()
     if mac in active_interceptors:
         return {"status": "already running"}
         
@@ -192,11 +193,9 @@ async def start_interception(mac: str):
         raise HTTPException(status_code=404, detail="Device or IP not found")
         
     try:
-        redirector = ArpRedirector(target_ip=device.ip_address)
-        # Start in background
-        redirector.running = True
-        redirector.thread = threading.Thread(target=redirector._poison, daemon=True)
-        redirector.thread.start()
+        from radar.utils.helpers import get_wifi_interface
+        redirector = ArpRedirector(device.ip_address, interface=get_wifi_interface())
+        redirector.start() # This now handles the thread internally
         
         active_interceptors[mac] = redirector
         return {"status": "started", "target_ip": device.ip_address}
@@ -206,6 +205,7 @@ async def start_interception(mac: str):
 
 @app.post("/api/tactical/{mac:path}/stop")
 async def stop_interception(mac: str):
+    mac = mac.upper()
     if mac not in active_interceptors:
         return {"status": "not running"}
         
@@ -215,13 +215,102 @@ async def stop_interception(mac: str):
     except Exception as e:
         logger.error(f"Error stopping interceptor: {e}")
     
-    del active_interceptors[mac]
+    if mac in active_interceptors:
+        del active_interceptors[mac]
     return {"status": "stopped"}
 
 @app.get("/api/tactical/{mac:path}/status")
 async def get_interception_status(mac: str):
-    is_running = mac in active_interceptors
-    return {"intercepting": is_running}
+    return {"intercepting": mac.upper() in active_interceptors}
+
+@app.get("/api/device/{mac:path}/export")
+async def export_device_data(mac: str):
+    import csv
+    import io
+    import os
+    from fastapi.responses import StreamingResponse
+    
+    mac = mac.upper()
+    devices = vault.get_network_devices()
+    device = next((d for d in devices if d.mac_address == mac), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    dns_logs = vault.get_dns_log(device.ip_address, limit=5000)
+    flows = vault.get_device_flows(device.ip_address, limit=5000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow(["--- DEVICE FORENSICS LOG ---"])
+    writer.writerow(["MAC", mac])
+    writer.writerow(["IP", device.ip_address])
+    writer.writerow(["Exported At", datetime.now().isoformat()])
+    writer.writerow([])
+    
+    writer.writerow(["--- DNS QUERY HISTORY ---"])
+    writer.writerow(["Timestamp", "Domain", "Type"])
+    for log in dns_logs:
+        writer.writerow([log.get('timestamp'), log.get('domain'), log.get('query_type')])
+    
+    writer.writerow([])
+    writer.writerow(["--- TRAFFIC FLOW HISTORY ---"])
+    writer.writerow(["Timestamp", "Dest IP", "Dest Port", "Protocol", "Service", "Bytes"])
+    for f in flows:
+        writer.writerow([f.get('timestamp'), f.get('dst_ip'), f.get('dst_port'), f.get('protocol'), f.get('service_label'), f.get('byte_count')])
+    
+    output.seek(0)
+    filename = f"radar_forensics_{mac.replace(':','-')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    # Save a local copy
+    export_dir = "radar/exports"
+    os.makedirs(export_dir, exist_ok=True)
+    with open(os.path.join(export_dir, filename), "w") as f:
+        f.write(output.getvalue())
+        
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+    
+    mac = mac.upper()
+    dns_logs = vault.get_dns_log(mac) # Need to ensure this helper exists or filter manually
+    # If get_dns_log(mac) doesn't exist, we get all and filter
+    if not hasattr(vault, 'get_dns_log'):
+        all_dns = vault.get_dns_log_all(limit=5000)
+        # We need to find the IP for this MAC to filter DNS logs (which are by IP)
+        devices = vault.get_network_devices()
+        device = next((d for d in devices if d.mac_address == mac), None)
+        if not device:
+             raise HTTPException(status_code=404, detail="Device not found")
+        dns_logs = [row for row in all_dns if row['ip_address'] == device.ip_address]
+    else:
+        dns_logs = vault.get_dns_log(mac)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Timestamp", "IP Address", "Query/Domain"])
+    for log in dns_logs:
+        writer.writerow([log.get('timestamp'), log.get('ip_address'), log.get('domain') or log.get('query')])
+    
+    output.seek(0)
+    filename = f"radar_forensics_{mac.replace(':','-')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    # Also save it locally in the exports folder as requested
+    import os
+    export_dir = "radar/exports"
+    os.makedirs(export_dir, exist_ok=True)
+    with open(os.path.join(export_dir, filename), "w") as f:
+        f.write(output.getvalue())
+        
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @app.get("/api/device/{mac:path}")
@@ -257,12 +346,7 @@ async def get_top_apps():
 async def trigger_scan():
     """Triggers a manual ARP scan of the network."""
     try:
-        if os.geteuid() != 0:
-            return {
-                "status": "error", 
-                "message": "Scan requires root privileges. Please restart the daemon/server with sudo to enable network discovery."
-            }
-            
+        # Try the scan; it will succeed if running as root or if setcap is configured
         scanner = ArpScanner(vault=vault)
         results = scanner.scan()
         return {"status": "success", "found": len(results)}

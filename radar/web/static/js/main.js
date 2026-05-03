@@ -15,7 +15,10 @@ const state = {
     devices: [],
     searchQuery: '',
     refreshInterval: null,
-    lastLoggedMac: null
+    lastLoggedMac: null,
+    // Forensics periodic refresh trackers
+    lastHeavyRefresh: 0,
+    forensicsHeavyData: { ports: [], dns: [], stats: { top_domains: [], total_bytes: 0 } }
 };
 
 // "Online" = seen within the last 5 minutes (scan runs every 3 min + jitter)
@@ -66,7 +69,7 @@ function handleRoute() {
         state.view = 'intelligence';
         state.selectedMac = decodeURIComponent(hash.replace('#/intelligence/', ''));
     } else if (hash.startsWith('#/device/')) {
-        state.view = 'detail';
+        state.view = 'forensics';
         state.selectedMac = decodeURIComponent(hash.replace('#/device/', ''));
     } else if (hash === '#/history') {
         state.view = 'history';
@@ -105,24 +108,41 @@ async function refreshData() {
             if (state.view === 'home') updateHomeView(overview, devices, topApps, topBandwidth);
             else if (state.view === 'history') updateHistoryView(devices);
             
-        } else if (state.view === 'detail' && state.selectedMac) {
-            const [resDetail, resFlows] = await Promise.all([
-                fetch(API.deviceDetail(state.selectedMac)),
-                fetch(API.deviceFlows(state.selectedMac)).then(r => r.json())
+        } else if (state.view === 'forensics' && state.selectedMac) {
+            const mac = state.selectedMac;
+
+            // Always fetch live data (device info + flows + tactical)
+            const [resDetail, resFlows, resTactical] = await Promise.all([
+                fetch(API.deviceDetail(mac)),
+                fetch(API.deviceFlows(mac)).then(r => r.json()).catch(() => []),
+                fetch(`/api/tactical/${encodeURIComponent(mac)}/status`).then(r => r.json()).catch(() => ({intercepting:false}))
             ]);
-            
+
+            // Periodic refresh for heavy data (DNS, Ports, Stats) — every ~6 seconds (3 cycles)
+            const now = Date.now();
+            if (!state.lastHeavyRefresh || (now - state.lastHeavyRefresh > 6000)) {
+                state.lastHeavyRefresh = now;
+                const [resPorts, resDns, resStats] = await Promise.all([
+                    fetch(API.deviceDetail(mac) + '/ports').then(r => r.json()).catch(() => ({open_ports:[]})),
+                    fetch(API.deviceDetail(mac) + '/dns-history').then(r => r.json()).catch(() => ({dns_history:[]})),
+                    fetch(API.deviceStats(mac)).then(r => r.json()).catch(() => ({top_domains:[],total_bytes:0}))
+                ]);
+                state.forensicsHeavyData = {
+                    ports: resPorts.open_ports || [],
+                    dns: resDns.dns_history || [],
+                    stats: resStats
+                };
+            }
+
             if (resDetail.ok) {
                 const detail = await resDetail.json();
-                
-                // Fetch ports separately (it's a new endpoint)
-                fetch(API.deviceDetail(state.selectedMac) + "/ports")
-                    .then(r => r.json())
-                    .then(portData => {
-                        updatePortsView(portData.open_ports);
-                    })
-                    .catch(() => updatePortsView(null));
-
-                updateDetailView(detail, resFlows);
+                updateForensicsView(
+                    detail, resFlows,
+                    state.forensicsHeavyData.ports,
+                    state.forensicsHeavyData.dns,
+                    resTactical,
+                    state.forensicsHeavyData.stats
+                );
             }
         } else if (state.view === 'intelligence' && state.selectedMac) {
             const [stats, flows, tactical] = await Promise.all([
@@ -145,6 +165,8 @@ async function refreshData() {
 function render() {
     const container = document.getElementById('view-container');
     container.innerHTML = '';
+    // Reset heavy data cache when navigating to a new view
+    state.forensicsHeavyLoaded = false;
     
     switch (state.view) {
         case 'home':
@@ -170,11 +192,18 @@ function render() {
             updateHistoryView(state.devices);
             break;
 
-        case 'detail':
-            container.innerHTML = document.getElementById('tpl-detail').innerHTML;
-            const b1 = document.getElementById('btn-back');
-            if (b1) b1.onclick = () => window.location.hash = '#/';
+        case 'forensics':
+        case 'detail': {
+            const tplForensics = document.getElementById('tpl-forensics');
+            if (!tplForensics) {
+                container.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8">⚠️ Forensics template not found. Please hard-refresh the page (Ctrl+Shift+R).</div>';
+                return;
+            }
+            container.innerHTML = tplForensics.innerHTML;
+            document.getElementById('btn-back').onclick = () => window.location.hash = '#/';
+            _wireTacticalButtons();
             break;
+        }
 
         case 'map':
             container.innerHTML = document.getElementById('tpl-map').innerHTML;
@@ -798,4 +827,273 @@ function renderNetworkMap() {
         if (!event.active) simulation.alphaTarget(0);
         d.fx = null; d.fy = null;
     }
+}
+
+// ── Tactical Button Wiring ────────────────────────────────────────────────────
+function _wireTacticalButtons() {
+    const btnStart = document.getElementById('btn-tactical-start');
+    const btnStop  = document.getElementById('btn-tactical-stop');
+    const btnExport = document.getElementById('btn-export-logs');
+
+    if (btnStart) {
+        btnStart.onclick = async () => {
+            btnStart.disabled = true; btnStart.textContent = 'STARTING...';
+            await fetch(`/api/tactical/${encodeURIComponent(state.selectedMac)}/start`, {method:'POST'}).catch(()=>{});
+            refreshData();
+        };
+    }
+    if (btnStop) {
+        btnStop.onclick = async () => {
+            btnStop.disabled = true; btnStop.textContent = 'STOPPING...';
+            await fetch(`/api/tactical/${encodeURIComponent(state.selectedMac)}/stop`, {method:'POST'}).catch(()=>{});
+            refreshData();
+        };
+    }
+    if (btnExport) {
+        btnExport.onclick = () => {
+            window.location.href = `/api/device/${encodeURIComponent(state.selectedMac)}/export`;
+        };
+    }
+}
+
+// ── OS Icon & Signal Helpers ─────────────────────────────────────────────────
+function getOsIcon(osGuess) {
+    if (!osGuess) return '❓';
+    const os = osGuess.toLowerCase();
+    if (os.includes('android')) return '🤖';
+    if (os.includes('ios') || os.includes('iphone') || os.includes('ipad')) return '🍎';
+    if (os.includes('macos') || os.includes('mac os')) return '🖥️';
+    if (os.includes('windows')) return '🪟';
+    if (os.includes('linux')) return '🐧';
+    if (os.includes('chromeos')) return '🌐';
+    if (os.includes('cisco') || os.includes('network') || os.includes('router')) return '📡';
+    return '💻';
+}
+
+function getOsMethod(osGuess) {
+    if (!osGuess) return 'Not detected';
+    if (osGuess.includes('(UA)'))    return 'User-Agent HTTP Header — Highest Confidence ✅';
+    if (osGuess.includes('(DHCP)')) return 'DHCP Option 55 PRL — High Confidence ✅';
+    if (osGuess.includes('NetBIOS'))return 'NetBIOS Name Query — High Confidence ✅';
+    return 'TCP SYN Packet Analysis — Medium Confidence ⚠️';
+}
+
+// ── Protocol Color Map ────────────────────────────────────────────────────────
+const PROTO_COLORS = {
+    'HTTPS':     '#00d4ff', 'DNS':       '#00ff88', 'HTTP':      '#ffaa00',
+    'SSH':       '#bf40ff', 'SMB':       '#ff4466', 'FTP':       '#ff8800',
+    'SMTP':      '#ff6666', 'IMAP':      '#ffcc00', 'POP3':      '#aaaaff',
+    'NTP':       '#66ccff', 'mDNS':      '#88ff88', 'HTTP-ALT':  '#ffd080',
+    'HTTPS-ALT': '#80e0ff', 'OpenVPN':   '#ff80bf', 'MQTT-TLS':  '#80ffcc',
+};
+function protoColor(p) { return PROTO_COLORS[p] || '#94a3b8'; }
+
+// ── Main Forensics View Updater ──────────────────────────────────────────────
+let _dnsAllRows = [];
+
+function updateForensicsView(data, flows, ports, dnsHistory, tactical, stats) {
+    if (state.view !== 'forensics') return;
+    const d = data.info;
+    if (!d) return;
+
+    const isOnline = (new Date() - new Date(d.last_seen)) < ONLINE_THRESHOLD_MS;
+    const name = getDisplayName(d);
+    const osGuess = d.os_guess || 'Unknown';
+
+    // ── Hero Section ──────────────────────────────────────────────────────────
+    setElText('forensics-name', name);
+    document.getElementById('forensics-mac').innerHTML = `${d.mac_address} <button class="copy-btn" onclick="copyToClipboard('${d.mac_address}')" title="Copy MAC">📋</button>`;
+    setElText('forensics-manufacturer', d.manufacturer || '');
+    setElText('forensics-confidence', `${d.confidence || 0}%`);
+    setElText('forensics-os-badge', osGuess.replace(/\s*\(UA\)|\s*\(DHCP\)|\s*\(NetBIOS\)/g, ''));
+
+    const iconEl = document.getElementById('forensics-icon');
+    if (iconEl) iconEl.textContent = getDeviceIcon(d);
+
+    const statusEl = document.getElementById('forensics-status');
+    if (statusEl) {
+        statusEl.textContent = isOnline ? '● Online' : '○ Offline';
+        statusEl.className = `forensics-status-badge ${isOnline ? '' : 'offline'}`;
+    }
+
+    // ── Identity Panel ────────────────────────────────────────────────────────
+    document.getElementById('forensics-ip').innerHTML = `${d.ip_address || '--'} <button class="copy-btn" onclick="copyToClipboard('${d.ip_address}')" title="Copy IP">📋</button>`;
+    document.getElementById('forensics-mac2').innerHTML = `${d.mac_address || '--'} <button class="copy-btn" onclick="copyToClipboard('${d.mac_address}')" title="Copy MAC">📋</button>`;
+    setElText('forensics-type', d.device_type || 'Unknown');
+    setElText('forensics-mdns', d.mdns_hostname || 'Not discovered');
+    setElText('forensics-ssdp', d.ssdp_info || 'Not discovered');
+    setElText('forensics-first-seen', d.first_seen ? new Date(d.first_seen).toLocaleString() : '--');
+    setElText('forensics-last-seen', d.last_seen ? new Date(d.last_seen).toLocaleString() : '--');
+
+    // ── OS Fingerprint Panel ──────────────────────────────────────────────────
+    const cleanOs = osGuess.replace(/\s*\(UA\)|\s*\(DHCP\)|\s*\(NetBIOS\)/g, '').trim();
+    setElText('forensics-os-name', cleanOs);
+    setElText('forensics-os-method', 'Method: ' + getOsMethod(osGuess));
+    const osIconEl = document.getElementById('forensics-os-icon');
+    if (osIconEl) osIconEl.textContent = getOsIcon(osGuess);
+
+    // OS Signal Confidence Badges
+    const signalsEl = document.getElementById('forensics-os-signals');
+    if (signalsEl) {
+        const hasUA    = osGuess.includes('(UA)');
+        const hasDHCP  = osGuess.includes('(DHCP)');
+        const hasNB    = osGuess.includes('NetBIOS');
+        const hasTCP   = !hasUA && !hasDHCP && !hasNB && osGuess !== 'Unknown';
+        signalsEl.innerHTML = `
+            <span class="os-signal-badge ${hasUA ? 'confirmed' : 'none'}">
+                ${hasUA ? '✅' : '○'} User-Agent Header
+            </span>
+            <span class="os-signal-badge ${hasDHCP ? 'confirmed' : 'none'}">
+                ${hasDHCP ? '✅' : '○'} DHCP Option 55 PRL
+            </span>
+            <span class="os-signal-badge ${hasNB ? 'confirmed' : 'none'}">
+                ${hasNB ? '✅' : '○'} NetBIOS Name
+            </span>
+            <span class="os-signal-badge ${hasTCP ? 'partial' : 'none'}">
+                ${hasTCP ? '⚠️' : '○'} TCP SYN Analysis
+            </span>
+        `;
+    }
+
+    // Activity
+    setElText('forensics-activity', d.last_activity || 'Passive / No activity detected');
+    setElText('forensics-traffic', d.traffic_summary || 'No traffic pattern captured yet.');
+
+    // ── Protocol Breakdown Chart ──────────────────────────────────────────────
+    const chartEl = document.getElementById('forensics-proto-chart');
+    if (chartEl && stats && stats.top_domains && stats.top_domains.length > 0) {
+        const maxCount = Math.max(...stats.top_domains.map(s => s.count));
+        chartEl.innerHTML = stats.top_domains.slice(0, 10).map(s => {
+            const pct = maxCount > 0 ? (s.count / maxCount * 100) : 0;
+            const color = protoColor(s.name);
+            return `
+                <div class="proto-bar-row">
+                    <span class="proto-label">${s.name}</span>
+                    <div class="proto-bar-track">
+                        <div class="proto-bar-fill" style="width:${pct}%;background:${color};">${s.count > 5 ? s.count : ''}</div>
+                    </div>
+                    <span class="proto-count">${s.count}</span>
+                </div>`;
+        }).join('');
+    } else if (chartEl) {
+        chartEl.innerHTML = '<span class="dim small">No traffic data yet — traffic will appear as devices communicate.</span>';
+    }
+
+    // ── Ports ─────────────────────────────────────────────────────────────────
+    const portsEl = document.getElementById('forensics-ports');
+    if (portsEl) {
+        if (!ports || ports.length === 0) {
+            portsEl.innerHTML = '<span class="dim small">No common ports found open.</span>';
+        } else {
+            portsEl.innerHTML = ports.map(p => `
+                <div class="port-badge">
+                    <span class="port-num">${p.port}</span>
+                    <span class="port-srv">${p.service}</span>
+                </div>`).join('');
+        }
+    }
+
+    // ── Tactical Controls ─────────────────────────────────────────────────────
+    const btnStart = document.getElementById('btn-tactical-start');
+    const btnStop  = document.getElementById('btn-tactical-stop');
+    const tacStatus = document.getElementById('tactical-status');
+    if (tactical && tactical.intercepting) {
+        if (btnStart) btnStart.style.display = 'none';
+        if (btnStop)  { btnStop.style.display = 'inline-block'; btnStop.disabled = false; btnStop.textContent = 'STOP INTERCEPTION'; }
+        if (tacStatus) tacStatus.innerHTML = '<span style="color:var(--accent-red)">● ACTIVE INTERCEPTION</span>';
+    } else {
+        if (btnStart) { btnStart.style.display = 'inline-block'; btnStart.disabled = false; btnStart.textContent = 'INITIATE INTERCEPTION'; }
+        if (btnStop)  btnStop.style.display = 'none';
+        if (tacStatus) tacStatus.textContent = 'Tactical Module Ready';
+    }
+
+    // ── DNS History ───────────────────────────────────────────────────────────
+    _dnsAllRows = dnsHistory || [];
+    _renderDnsTable(_dnsAllRows);
+
+    const dnsSearch = document.getElementById('dns-search');
+    if (dnsSearch && !dnsSearch._bound) {
+        dnsSearch._bound = true;
+        dnsSearch.addEventListener('input', e => {
+            const q = e.target.value.toLowerCase();
+            _renderDnsTable(_dnsAllRows.filter(r => (r.domain || '').toLowerCase().includes(q)));
+        });
+    }
+
+    // ── DPI Flows ─────────────────────────────────────────────────────────────
+    const flowBody = document.getElementById('forensics-flows-body');
+    if (flowBody) {
+        if (!flows || flows.length === 0) {
+            flowBody.innerHTML = '<tr><td colspan="6" class="dim small" style="text-align:center;padding:20px">No flows captured yet</td></tr>';
+        } else {
+            flowBody.innerHTML = flows.slice(0, 60).map(f => {
+                const host = f.service_label || '';
+                const isDomain = host.includes('.') && !/^[0-9.]+$/.test(host);
+                const kb = f.byte_count ? (f.byte_count / 1024).toFixed(1) + ' KB' : '--';
+                const cleanHost = host.replace('[HTTP-HOST] ', '').replace(/\.tariq-domain\.?$/i, '');
+                
+                return `<tr>
+                    <td class="mono small dim">${new Date(f.timestamp).toLocaleTimeString()}</td>
+                    <td class="mono small">
+                        ${f.dst_ip || '--'} 
+                        <button class="copy-btn" onclick="copyToClipboard('${f.dst_ip}')" title="Copy IP">📋</button>
+                    </td>
+                    <td>
+                        <span class="${isDomain ? 'highlight' : 'dim small'}">${cleanHost || f.dst_ip || '--'}</span>
+                        ${cleanHost ? `<button class="copy-btn" onclick="copyToClipboard('${cleanHost}')" title="Copy Host">📋</button>` : ''}
+                    </td>
+                    <td class="mono small">${f.dst_port || '--'}</td>
+                    <td><span style="color:${protoColor(f.protocol)};font-size:0.75rem;font-weight:600">${f.protocol || '--'}</span></td>
+                    <td class="mono small dim">${kb}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+}
+
+function _renderDnsTable(rows) {
+    const body = document.getElementById('forensics-dns-body');
+    if (!body) return;
+    if (!rows || rows.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" class="dim small" style="text-align:center;padding:20px">No DNS queries captured yet</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.slice(0, 200).map((r, i) => {
+        let domain = r.domain || r.query || '';
+        const method = domain.startsWith('[HTTP-HOST]') ? 'HTTP Host' : 'DNS Query';
+        
+        // Clean up domain: remove .tariq-domain and other local search domains
+        domain = domain.replace('[HTTP-HOST] ', '');
+        domain = domain.replace(/\.tariq-domain\.?$/i, '');
+        domain = domain.replace(/\.local\.?$/i, '');
+
+        const ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
+        return `<tr>
+            <td class="mono dim small">${i + 1}</td>
+            <td>
+                <span class="${domain.includes('google') || domain.includes('youtube') || domain.includes('facebook') ? 'highlight' : ''}">${domain}</span>
+                <button class="copy-btn" onclick="copyToClipboard('${domain}')" title="Copy Domain">📋</button>
+            </td>
+            <td><span class="os-signal-badge ${method === 'HTTP Host' ? 'confirmed' : 'partial'}">${method}</span></td>
+            <td class="mono small dim">${ts}</td>
+        </tr>`;
+    }).join('');
+}
+function copyToClipboard(text) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(`Copied: ${text.length > 25 ? text.substring(0, 25) + '...' : text}`);
+    }).catch(err => {
+        console.error('Copy failed:', err);
+    });
+}
+
+function showToast(message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<span>📋</span> ${message}`;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
 }

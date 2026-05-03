@@ -540,10 +540,19 @@ class TrafficSentinel:
                 except Exception:
                     pass
 
-        # ── 5. TLS SNI Extraction (if TLS layer available) ────────────────────
+        # ── 4. DNS-over-HTTPS (DoH) Detection ─────────────────────────────────
+        if dst_port == 443 and dst_ip in ("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112"):
+            with self._lock:
+                self.activity_map[src_ip] = "Encrypted DNS (DoH)"
+            logger.info(f"[DoH] {src_ip} -> {dst_ip} (Encrypted DNS)")
+
+        # ── 5. TLS SNI & Application Fingerprinting (if TLS layer available) ──────
         if HAS_TLS and TLSClientHello and pkt.haslayer(TLSClientHello):
             try:
-                sni_raw = getattr(pkt[TLSClientHello], "servername", None)
+                ch = pkt[TLSClientHello]
+                
+                # A. SNI Extraction
+                sni_raw = getattr(ch, "servername", None)
                 if sni_raw:
                     sni = sni_raw.decode("utf-8", errors="ignore").lower()
                     with self._lock:
@@ -553,31 +562,98 @@ class TrafficSentinel:
                         with self._lock:
                             self.activity_map[src_ip] = activity
                         logger.debug(f"[SNI] {src_ip} → {activity} via {sni}")
-            except Exception:
+
+                # B. Basic TLS Application Fingerprinting (JA3-Lite)
+                ciphers = getattr(ch, "ciphers", [])
+                if ciphers:
+                    # Chrome/Chromium uses GREASE ciphers (0x0A0A, 0x1A1A, etc)
+                    is_chrome = any((c & 0x0F0F) == 0x0A0A for c in ciphers)
+                    num_ciphers = len(ciphers)
+                    
+                    app_guess = None
+                    if is_chrome:
+                        app_guess = "Chrome / Chromium"
+                    elif num_ciphers == 17:
+                        app_guess = "Safari / Apple WebKit"
+                    elif num_ciphers == 14:
+                        app_guess = "Firefox"
+                    elif num_ciphers in (38, 39):
+                        app_guess = "Command Line (curl/wget)"
+                    elif num_ciphers <= 6:
+                        app_guess = "Script (Python/Go/Bot)"
+
+                    if app_guess:
+                        with self._lock:
+                            curr_activity = self.activity_map.get(src_ip, "")
+                            # Don't overwrite high-value domain intelligence
+                            if not curr_activity or curr_activity == "Idle / Passive":
+                                self.activity_map[src_ip] = f"Using {app_guess}"
+                        logger.debug(f"[TLS-FP] {src_ip} -> {app_guess} ({num_ciphers} ciphers)")
+
+            except Exception as e:
                 pass
 
-        # ── 6. Passive OS Fingerprinting (TTL + TCP Window) ───────────────────
+        # ── 6. Advanced Passive OS Fingerprinting (TTL + TCP Window + Options) ────
         if pkt.haslayer(TCP) and pkt[TCP].flags == 0x02:  # SYN packets only
             ttl = pkt[IP].ttl
             window = pkt[TCP].window
-            if ttl >= 100:          # Windows starts at TTL 128
-                os_guess = "Windows"
-            elif ttl >= 50:         # Linux/Android/macOS start at TTL 64
+            opts = pkt[TCP].options
+
+            os_guess = "Unknown OS"
+
+            # Extract TCP options
+            mss = None
+            wscale = None
+            has_timestamps = False
+            for opt in opts:
+                if opt[0] == 'MSS': mss = opt[1]
+                elif opt[0] == 'WScale': wscale = opt[1]
+                elif opt[0] == 'Timestamp': has_timestamps = True
+
+            if ttl <= 64:  # Linux / Unix / macOS / Android / iOS family
                 if window == 65535:
-                    os_guess = "macOS / iOS (iPhone/iPad)"
+                    # macOS/iOS use wscale=5 or 6 with MSS=1460
+                    # ANDROID can also produce window=65535 but uses wscale=8 or 9
+                    # This is the key differentiation point
+                    if wscale in (8, 9, 10, 11, 12):
+                        os_guess = "Android"
+                    elif wscale in (5, 6) and mss in (1460, 1380):
+                        os_guess = "macOS / iOS"
+                    elif wscale in (5, 6):
+                        os_guess = "iOS (Possible)"
+                    else:
+                        os_guess = "Linux / Android / BSD"
+                elif window == 29200:
+                    os_guess = "Linux (Ubuntu/Debian)"
+                elif window == 64240:
+                    # Android on many kernels uses this window
+                    os_guess = "Android"
+                elif window in (5840, 14600, 29400):
+                    os_guess = "Linux (Kernel 2.x)"
                 elif window >= 29000:
                     os_guess = "Linux / Android"
                 else:
-                    os_guess = "Linux (Custom)"
-            else:
-                os_guess = "Unknown OS"
+                    os_guess = "Linux (IoT / Custom)"
+            elif ttl <= 128:  # Windows
+                if window == 8192:
+                    os_guess = "Windows (7 / 8)"
+                elif window in (64240, 65535):
+                    os_guess = "Windows (10 / 11)"
+                elif window == 16384:
+                    os_guess = "Windows (Legacy)"
+                else:
+                    os_guess = "Windows"
+            elif ttl <= 255:
+                os_guess = "Network Equipment (Cisco/Router)"
 
+            # Only update if we don't have a high-confidence UA-based guess already
             with self._lock:
-                prev = self.os_fingerprints.get(src_ip)
-                if prev != os_guess:
+                current = self.os_fingerprints.get(src_ip, "")
+                # High-confidence signals like User-Agent contain "(UA)" tag
+                is_ua_confirmed = "(UA)" in current
+                if not is_ua_confirmed and current != os_guess and os_guess != "Unknown OS":
                     self.os_fingerprints[src_ip] = os_guess
-                    logger.info(f"[OS-FP] {src_ip} → {os_guess} (TTL={ttl}, WIN={window})")
-                    # Persist to database in the background
+                    logger.info(f"[OS-FP] {src_ip} → {os_guess} (TTL={ttl}, WIN={window}, WScale={wscale})")
                     try:
                         self.vault.update_os_guess(src_ip, os_guess)
                     except Exception:

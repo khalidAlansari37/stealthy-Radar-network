@@ -35,6 +35,19 @@ live-root: ## Launch the web dashboard with FULL PERMISSIONS (Sudo)
 brain: ## Launch the Intelligence Daemon with FULL PERMISSIONS (Sudo)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.main
 
+brain-nosudo: ## Launch the Intelligence Daemon without sudo (requires fix-perms first)
+	@PYTHONPATH=. $(PYTHON) -m radar.main
+
+fix-perms: ## Give the Python binary perms to sniff traffic without sudo
+	@echo "🛡️  Setting capabilities on the Python binary..."
+	@if [ -L $(PYTHON) ]; then \
+		echo "🔄 Replacing Python symlink with actual binary for setcap..."; \
+		mv $(PYTHON) $(PYTHON).bak; \
+		cp /usr/bin/python3 $(PYTHON); \
+	fi
+	sudo setcap cap_net_raw,cap_net_admin=eip $(PYTHON)
+	@echo "✅ Success! You can now run 'make brain-nosudo' without a password."
+
 intercept: ## Unlock 'Outside' traffic for a specific IP (usage: make intercept IP=192.168.1.10)
 	@sudo PYTHONPATH=. $(PYTHON) -m radar.fingerprint.tactical $(IP)
 

